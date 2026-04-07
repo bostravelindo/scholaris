@@ -1,0 +1,2 @@
+# scholaris
+AI Academic Writer
