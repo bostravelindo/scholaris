@@ -3,10 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SCHOLARIS v8 — AI Academic Writer Engine + Anti-Halusinasi</title>
+<title>SCHOLARIS AI Academic Writer Engine Pro</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Source+Sans+3:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@9.0.2/build/index.umd.min.js"></script>
 <style>
 :root {
   --bg: #faf8f5;
@@ -1089,30 +1090,6 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
 .rf-source-tag-cr  { background: rgba(46,125,50,.1);  color: #2e7d32; }
 .rf-source-tag-ss  { background: rgba(6,182,212,.1); color: #0891b2; }
 .rf-source-tag-ep  { background: rgba(239,68,68,.1); color: #dc2626; }
-.rf-source-tag-sc  { background: rgba(255,130,15,.12); color: #e8680a; border: 1px solid rgba(255,130,15,.25); }
-.rf-source-tag-ss  { background: rgba(139,92,246,.1);  color: #7c3aed; }
-.rf-src-count-sc   { background: rgba(255,130,15,.1);  color: #c05a08; }
-.rf-src-count-ss2  { background: rgba(139,92,246,.1);  color: #7c3aed; }
-.rf-badge-sc { background: rgba(255,130,15,.12); border-color: rgba(255,130,15,.3); color: #f97316; }
-.rf-src-btn.active-sc { background: rgba(255,130,15,.1); border-color: #f97316; color: #c05a08; }
-.rf-src-btn.active-s2 { background: rgba(139,92,246,.1); border-color: #a78bfa; color: #7c3aed; }
-.rf-src-dot-sc { background: #f97316; }
-.rf-src-dot-s2 { background: #a78bfa; }
-.scopus-badge {
-  display: inline-flex; align-items: center; gap: 4px;
-  font-size: .6rem; font-weight: 800; padding: 1px 7px;
-  border-radius: 6px; text-transform: uppercase; letter-spacing: .5px;
-  background: linear-gradient(135deg, rgba(255,130,15,.15), rgba(255,80,0,.08));
-  color: #e8680a; border: 1px solid rgba(255,130,15,.3);
-}
-.scopus-mode-indicator {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: linear-gradient(135deg, rgba(255,130,15,.12), rgba(255,80,0,.06));
-  border: 1px solid rgba(255,130,15,.3); color: #e8680a;
-  font-size: .72rem; font-weight: 700; padding: 5px 14px;
-  border-radius: 8px; letter-spacing: .3px;
-}
-.scopus-mode-active .rf-search-panel { border-color: rgba(255,130,15,.35); }
 .rf-source-tag-oa  { background: rgba(139,92,246,.1); color: #7c3aed; }
 .rf-year-badge {
   font-size: .7rem; font-weight: 700; padding: 1px 8px; border-radius: 8px;
@@ -1133,6 +1110,172 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
   background: var(--bg); border-radius: 6px; border: 1px solid var(--border);
   margin-bottom: 14px; font-size: .78rem; color: var(--text2); }
 .rf-metric-item strong { color: var(--accent); }
+/* ============================================================ */
+
+/* ============================================================
+   SCHOLARIS v12 — MISSING CSS (template-library, bmt, autosave)
+   ============================================================ */
+
+/* ── Auto-save Indicator (pojok kanan bawah, tidak ganggu layout) ── */
+.autosave-indicator {
+  position: fixed; bottom: 18px; right: 20px; z-index: 8000;
+  display: flex; align-items: center; gap: 7px;
+  background: rgba(46,125,50,.92); color: #fff;
+  padding: 6px 14px; border-radius: 20px;
+  font-size: .72rem; font-weight: 600;
+  box-shadow: 0 2px 10px rgba(0,0,0,.18);
+  opacity: 0; pointer-events: none;
+  transition: opacity .4s ease;
+}
+.autosave-indicator.show { opacity: 1; }
+.as-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #fff; flex-shrink: 0;
+  animation: pulse-as 1.6s ease infinite;
+}
+@keyframes pulse-as { 0%,100%{opacity:1;} 50%{opacity:.35;} }
+
+/* ── Book Mode Tabs (bmt) ── */
+.bmt {
+  padding: 7px 16px; border: none; background: transparent;
+  font-family: var(--font-body); font-size: .82rem; font-weight: 600;
+  color: var(--text2); cursor: pointer; transition: all .15s;
+  white-space: nowrap;
+}
+.bmt:hover { color: var(--text); background: var(--bg2); }
+.bmt.active { background: var(--accent); color: #fff; }
+
+/* ── btn-export-docx ── */
+.btn-export-docx {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px; font-size: .78rem; font-weight: 600;
+  background: #1565c0; color: #fff; border: none;
+  border-radius: 6px; cursor: pointer; transition: all .15s;
+  white-space: nowrap;
+}
+.btn-export-docx:hover { background: #0d47a1; transform: translateY(-1px); }
+
+/* ── Template Library Overlay — FULL SCREEN MODAL ── */
+.template-library-overlay {
+  position: fixed; inset: 0; z-index: 9200;
+  background: rgba(0,0,0,.55); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  opacity: 0; pointer-events: none;
+  transition: opacity .25s ease;
+}
+.template-library-overlay.active {
+  opacity: 1; pointer-events: all;
+}
+.tl-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  width: 100%; max-width: 1000px;
+  max-height: 88vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,.2);
+  overflow: hidden;
+}
+.tl-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  flex-shrink: 0;
+  gap: 14px;
+}
+.tl-title {
+  font-family: var(--font-display);
+  font-size: 1.05rem; font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.tl-search {
+  width: 220px; padding: 7px 12px;
+  border: 1px solid var(--border); border-radius: 6px;
+  font-family: var(--font-body); font-size: .84rem;
+  background: var(--surface); color: var(--text);
+  transition: border-color .2s;
+}
+.tl-search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.tl-body {
+  display: flex; flex: 1; overflow: hidden;
+}
+.tl-cats {
+  width: 190px; flex-shrink: 0;
+  background: var(--bg);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 10px 0;
+}
+.tl-cat-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 16px; cursor: pointer;
+  font-size: .82rem; color: var(--text2);
+  border-left: 3px solid transparent;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.tl-cat-item:hover { background: var(--bg2); color: var(--text); }
+.tl-cat-item.active {
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+  color: var(--accent); font-weight: 700;
+}
+.tl-grid {
+  flex: 1; overflow-y: auto; padding: 18px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+  align-content: start;
+}
+.tl-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px; padding: 16px;
+  display: flex; flex-direction: column; gap: 8px;
+  transition: box-shadow .15s, border-color .15s;
+  cursor: default;
+}
+.tl-card:hover { box-shadow: var(--shadow); border-color: var(--accent-border); }
+.tl-card-icon { font-size: 1.6rem; line-height: 1; }
+.tl-card-title {
+  font-family: var(--font-display);
+  font-size: .92rem; font-weight: 700;
+  color: var(--text); line-height: 1.35;
+}
+.tl-card-desc {
+  font-size: .78rem; color: var(--text2);
+  line-height: 1.55; flex: 1;
+}
+.tl-card-tags {
+  display: flex; flex-wrap: wrap; gap: 5px;
+}
+.tl-tag {
+  font-size: .66rem; font-weight: 600;
+  padding: 2px 8px; border-radius: 20px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+}
+.tl-card-use {
+  width: 100%; padding: 8px;
+  background: var(--accent); color: #fff;
+  border: none; border-radius: 6px;
+  font-family: var(--font-body);
+  font-size: .8rem; font-weight: 700;
+  cursor: pointer; transition: all .15s;
+  margin-top: 4px;
+}
+.tl-card-use:hover { background: var(--accent2); transform: translateY(-1px); }
+
+/* Responsive tl */
+@media (max-width: 700px) {
+  .tl-cats { width: 120px; }
+  .tl-title { font-size: .9rem; }
+  .tl-grid { grid-template-columns: 1fr; padding: 12px; }
+}
 /* ============================================================ */
 
 </style>
@@ -1156,7 +1299,7 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
       </div>
       <div class="nav-item" data-page="multiwriter" onclick="navTo('multiwriter',this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-        Multi-Turn Writer
+        Multi-Turn / Book
       </div>
       <div class="nav-item" data-page="references" onclick="navTo('references',this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5v-15A2.5 2.5 0 016.5 2H20v20H6.5a2.5 2.5 0 010-5H20"/></svg>
@@ -1178,6 +1321,10 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
       <div class="nav-item" data-page="bibliography" onclick="navTo('bibliography',this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
         Bibliography Builder
+      </div>
+      <div class="nav-item" data-page="history" onclick="navTo('history',this);renderHistory();">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Riwayat Dokumen <span id="historyNavBadge" style="background:var(--accent);color:white;border-radius:10px;font-size:.6rem;padding:1px 6px;margin-left:4px;font-weight:700;"></span>
       </div>
       <div class="nav-item" data-page="tips" onclick="navTo('tips',this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
@@ -1264,8 +1411,8 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
               <div class="feature-card-lock">🔒</div>
               <div class="feature-card-icon">🔍</div>
               <h3>Quad-Source Reference Finder</h3>
-              <p>Referensi dari <strong>6 sumber</strong> termasuk filter eksklusif jurnal terindeks Scopus via OpenAlex — DOI aktif, label Scopus, sitasi real, open access terdeteksi.</p>
-              <div class="feature-card-tags"><span class="feature-card-tag">CrossRef</span><span class="feature-card-tag">DOAJ</span><span class="feature-card-tag">Europe PMC</span><span class="feature-card-tag">OpenAlex</span><span style="background:rgba(255,130,15,.15);color:#e8680a;border-color:rgba(255,130,15,.3);" class="feature-card-tag">🟠 Scopus Filter</span><span class="feature-card-tag">Semantic Scholar</span><span class="feature-card-tag">APA7/Chicago/IEEE</span></div>
+              <p>Referensi dari 4 database global: CrossRef, DOAJ, Europe PMC, dan OpenAlex — DOI aktif, abstrak, sitasi real, open access otomatis terdeteksi.</p>
+              <div class="feature-card-tags"><span class="feature-card-tag">CrossRef</span><span class="feature-card-tag">DOAJ</span><span class="feature-card-tag">Europe PMC</span><span class="feature-card-tag">OpenAlex</span><span class="feature-card-tag">APA7/Chicago/IEEE</span></div>
             </div>
             <div class="feature-card">
               <div class="feature-card-lock">🔒</div>
@@ -1493,7 +1640,7 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
           </button>
           <button class="btn btn-secondary" style="margin-left:8px;" id="btnGenerateRefs" onclick="generateWithRefs()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            Generate + Cari Referensi (6 Sumber)
+            Generate + Cari Referensi (4 Sumber)
           </button>
         </div>
 
@@ -1545,14 +1692,17 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
             <span class="spacer"></span>
             <span class="word-count" id="wordCount"></span>
             <button class="btn btn-sm btn-secondary" onclick="copyOutput()">📋 Salin</button>
-            <button class="btn btn-sm btn-secondary" onclick="exportDOCX()">📄 DOCX</button>
-            <button class="btn btn-sm btn-secondary" onclick="exportPDF()">📕 PDF</button>
+            <button class="btn btn-sm btn-export-docx" onclick="exportDOCX()" title="Export ke Microsoft Word (.docx)">📄 Export DOCX</button>
+            <button class="btn btn-sm btn-export-pdf"  onclick="exportPDF()"  title="Export ke PDF">📕 PDF</button>
+            <button class="btn btn-sm btn-secondary"   onclick="saveToHistory()" title="Simpan ke Riwayat Dokumen">💾 Simpan</button>
             <button class="btn btn-sm" id="citDocBtn"
               style="background:linear-gradient(135deg,#1565c0,#1976d2);color:#fff;border:none;display:none;"
               onclick="runCitationDoctor()">
               🔬 Validasi &amp; Perbaiki Referensi
             </button>
           </div>
+          <!-- AI Score Bar -->
+          <div class="ai-score-bar" id="aiScoreBar"></div>
           <div class="output-area" id="outputArea"></div>
           <!-- Citation Doctor progress panel -->
           <div class="citdoc-panel" id="citdocPanel">
@@ -1589,49 +1739,197 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
       </div>
 
       <!-- ==================== PAGE: MULTI-TURN WRITER ==================== -->
+      <!-- ==================== PAGE: MULTI-TURN + BOOK MODE ==================== -->
       <div class="page" id="page-multiwriter">
-        <div class="card">
-          <div class="card-title">Multi-Turn Academic Writer</div>
-          <p style="color:var(--text3);font-size:.85rem;margin-bottom:16px;">Tulis secara interaktif dengan AI — bangun argumen, perbaiki, dan kembangkan tulisan melalui dialog multi-giliran.</p>
-          <div class="row" style="margin-bottom:14px;">
-            <div>
-              <label>Model AI</label>
-              <select id="mtModel">
+
+        <!-- TOP CONTROLS -->
+        <div class="card" style="margin-bottom:14px;padding:14px 18px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <span style="font-size:.85rem;font-weight:700;color:var(--text);">Mode:</span>
+              <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:7px;overflow:hidden;">
+                <button class="bmt active" id="mt-tab-chat" onclick="switchMtMode('chat')">💬 Dialog</button>
+                <button class="bmt" id="mt-tab-book" onclick="switchMtMode('book')">📖 Book Mode</button>
+              </div>
+              <button class="btn btn-sm btn-secondary" onclick="openTemplateLibrary()" title="Template Library">
+                📚 Template
+              </button>
+              <button class="btn btn-sm btn-secondary" onclick="clearBookProject()" title="Mulai proyek baru">
+                🔄 Proyek Baru
+              </button>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <select id="mtModel" style="width:190px;">
                 <option value="google/gemini-2.5-pro-preview" selected>Gemini 2.5 Pro</option>
                 <option value="anthropic/claude-sonnet-4-5">Claude Sonnet 4.5</option>
                 <option value="openai/gpt-4o">GPT-4o</option>
                 <option value="deepseek/deepseek-r1">DeepSeek R1</option>
                 <option value="meta-llama/llama-4-maverick">🦙 Llama 4 Maverick</option>
               </select>
-            </div>
-            <div>
-              <label>Bahasa</label>
-              <select id="mtLang">
+              <select id="mtLang" style="width:150px;">
                 <option value="id">Bahasa Indonesia</option>
                 <option value="en">English</option>
                 <option value="ar">Arabic</option>
               </select>
             </div>
           </div>
-          <div id="chatHistory" style="max-height:50vh;overflow-y:auto;margin-bottom:14px;"></div>
-          <div style="display:flex;gap:8px;">
-            <textarea id="mtInput" rows="3" placeholder="Tulis instruksi atau lanjutan dialog..." style="flex:1;"></textarea>
-            <div style="display:flex;flex-direction:column;gap:6px;">
-              <button class="btn btn-primary" onclick="sendMultiTurn()">Kirim</button>
-              <button class="btn btn-sm btn-secondary" onclick="clearChat()">Reset</button>
+        </div>
+
+        <!-- CHAT MODE -->
+        <div id="mt-panel-chat">
+          <div class="card">
+            <div id="chatHistory" style="max-height:55vh;overflow-y:auto;margin-bottom:14px;"></div>
+            <div style="display:flex;gap:8px;">
+              <textarea id="mtInput" rows="3" placeholder="Tulis instruksi atau lanjutan dialog — atau gunakan Template untuk memulai cepat..." style="flex:1;"></textarea>
+              <div style="display:flex;flex-direction:column;gap:6px;">
+                <button class="btn btn-primary" onclick="sendMultiTurn()">Kirim</button>
+                <button class="btn btn-sm btn-secondary" onclick="clearChat()">Reset</button>
+              </div>
+            </div>
+          </div>
+          <div class="card" id="mtOutputCard" style="display:none;margin-top:14px;">
+            <div class="output-toolbar">
+              <span class="card-title" style="margin:0;">Gabungan Tulisan</span>
+              <span class="spacer"></span>
+              <span class="word-count" id="mtWordCount"></span>
+              <button class="btn btn-sm btn-secondary" onclick="copyMtOutput()">📋 Salin</button>
+              <button class="btn btn-sm btn-export-docx" onclick="exportMtDOCX()">📄 DOCX</button>
+              <button class="btn btn-sm btn-secondary" onclick="saveMtToHistory()">💾 Simpan</button>
+            </div>
+            <div class="output-area" id="mtOutputArea"></div>
+          </div>
+        </div>
+
+        <!-- BOOK MODE -->
+        <div id="mt-panel-book" style="display:none;">
+
+          <!-- Book setup (shown when no chapters yet) -->
+          <div id="book-setup" class="book-setup-card">
+            <div class="card-title">📖 Mulai Proyek Buku</div>
+            <p style="color:var(--text3);font-size:.84rem;margin-bottom:16px;">Isi judul buku dan susun daftar bab. AI akan generate setiap bab secara berurutan dengan memori konteks penuh.</p>
+            <div class="row" style="margin-bottom:14px;">
+              <div style="flex:3;">
+                <label>Judul Buku / Dokumen</label>
+                <input type="text" id="bookTitle" placeholder="Contoh: Ekonomi Islam Digital: Transformasi Zakat di Era Fintech">
+              </div>
+              <div>
+                <label>Target Kata/Bab</label>
+                <select id="bookWordTarget">
+                  <option value="3000">3.000 kata (~10 hal)</option>
+                  <option value="5000" selected>5.000 kata (~17 hal)</option>
+                  <option value="7000">7.000 kata (~23 hal)</option>
+                  <option value="10000">10.000 kata (~33 hal)</option>
+                </select>
+              </div>
+              <div>
+                <label>Tipe Buku</label>
+                <select id="bookType">
+                  <option value="academic">Akademis/Ilmiah</option>
+                  <option value="popular">Populer-Ilmiah</option>
+                  <option value="textbook">Buku Teks/Ajar</option>
+                  <option value="monograph">Monografi</option>
+                  <option value="thesis">Tesis/Disertasi</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label style="margin-bottom:8px;display:block;">
+                Daftar Bab
+                <span style="font-size:.72rem;color:var(--text3);margin-left:8px;">Klik judul bab untuk edit · Drag nomor untuk susun ulang</span>
+              </label>
+              <div class="book-chapter-list-editor" id="bookChapterEditor"></div>
+              <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+                <button class="btn btn-sm btn-secondary" onclick="addBookChapter()">+ Tambah Bab</button>
+                <button class="btn btn-sm btn-secondary" onclick="generateBookOutline()">🤖 Generate Outline dari Judul</button>
+                <button class="btn btn-sm btn-secondary" onclick="openTemplateLibrary('book')">📚 Pakai Template Buku</button>
+              </div>
+            </div>
+            <div style="margin-top:16px;display:flex;gap:10px;">
+              <button class="btn btn-primary" onclick="startBookProject()" style="padding:10px 28px;">
+                🚀 Mulai Generate Buku
+              </button>
+              <div class="continuity-badge">
+                🔒 Continuity Lock Aktif — konteks lintas bab terjaga
+              </div>
+            </div>
+          </div>
+
+          <!-- Book writing interface (shown after start) -->
+          <div id="book-workspace" style="display:none;">
+            <div class="book-mode-wrapper">
+              <!-- Chapter Navigator -->
+              <div class="chapter-nav">
+                <div class="chapter-nav-header">
+                  <span id="bookTitleDisplay" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📖 Proyek Buku</span>
+                  <button class="btn btn-sm btn-secondary" onclick="bookExportAll()" style="padding:3px 8px;font-size:.65rem;">📄</button>
+                </div>
+                <div class="chapter-nav-list" id="chapterNavList"></div>
+                <div class="chapter-nav-footer">
+                  <div style="display:flex;justify-content:space-between;">
+                    <span id="bookChapDone">0/0 bab</span>
+                    <span id="bookTotalWC">0 kata</span>
+                  </div>
+                  <div class="book-progress-bar">
+                    <div class="book-progress-fill" id="bookProgressFill" style="width:0%"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Writing panel -->
+              <div class="book-write-panel">
+                <div class="book-mode-tabs">
+                  <button class="bmt active" id="bpTab-write" onclick="switchBookPanel('write')">✍️ Tulis</button>
+                  <button class="bmt" id="bpTab-preview" onclick="switchBookPanel('preview')">👁 Preview Bab</button>
+                  <button class="bmt" id="bpTab-full" onclick="switchBookPanel('full')">📄 Dokumen Penuh</button>
+                </div>
+                <div class="book-chapter-header">
+                  <span class="bch-title" id="bchTitle">Pilih bab dari navigator</span>
+                  <span class="bch-badge" id="bchStatus">—</span>
+                  <span class="bch-wctarget" id="bchTarget"></span>
+                  <span class="spacer"></span>
+                  <button class="btn btn-sm btn-secondary" onclick="regenCurrentChapter()" id="btnRegenChap" style="display:none;">🔄 Regenerasi</button>
+                </div>
+
+                <!-- Write panel -->
+                <div id="bpanel-write" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+                  <div class="book-chat-area" id="bookChatArea"></div>
+                  <div class="book-input-bar">
+                    <textarea id="bookInput" rows="2"
+                      placeholder="Instruksi khusus untuk bab ini (opsional) — atau kosongkan untuk generate otomatis..."
+                      onkeydown="if(event.ctrlKey&&event.key==='Enter'){sendBookChapter();event.preventDefault();}">
+                    </textarea>
+                    <div style="display:flex;flex-direction:column;gap:5px;">
+                      <button class="btn btn-primary" onclick="sendBookChapter()" id="btnSendBook">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 2-7 20-4-9-9-4 20-7z"/></svg>
+                        Generate
+                      </button>
+                      <button class="btn btn-sm btn-secondary" onclick="generateAllChapters()" title="Generate semua bab otomatis (batch)">⚡ Semua</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Preview panel -->
+                <div id="bpanel-preview" style="display:none;flex:1;overflow:hidden;">
+                  <div class="book-output-view" id="bookChapterPreview"></div>
+                </div>
+
+                <!-- Full document panel -->
+                <div id="bpanel-full" style="display:none;flex:1;overflow:hidden;">
+                  <div style="padding:10px 14px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;">
+                    <button class="btn btn-sm btn-export-docx" onclick="bookExportAll()">📄 Export DOCX Lengkap</button>
+                    <button class="btn btn-sm btn-export-pdf"  onclick="bookExportPDF()">📕 Export PDF</button>
+                    <button class="btn btn-sm btn-secondary"   onclick="saveBookToHistory()">💾 Simpan ke Riwayat</button>
+                    <span class="word-count" id="bookFullWC"></span>
+                  </div>
+                  <div class="book-output-view" id="bookFullView" style="padding:24px 32px;"></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-        <div class="card" id="mtOutputCard" style="display:none;">
-          <div class="output-toolbar">
-            <span class="card-title" style="margin:0;">Gabungan Tulisan</span>
-            <span class="spacer"></span>
-            <button class="btn btn-sm btn-secondary" onclick="copyMtOutput()">📋 Salin</button>
-            <button class="btn btn-sm btn-secondary" onclick="exportMtDOCX()">📄 DOCX</button>
-          </div>
-          <div class="output-area" id="mtOutputArea"></div>
-        </div>
+
       </div>
+      <!-- ==================== END: MULTI-TURN + BOOK MODE ==================== -->
 
       <!-- ==================== PAGE: REFERENCES ==================== -->
       <!-- ==================== PAGE: REFERENCE FINDER ==================== -->
@@ -1639,17 +1937,15 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
 
         <!-- Hero -->
         <div class="rf-hero">
-          <div class="rf-hero-title">🔍 Hexa-Source Reference Finder <span class="scopus-badge">● Scopus Indexed</span></div>
-          <div class="rf-hero-sub">Temukan referensi dari <strong style="color:#e8c86a">6 sumber</strong> termasuk filter eksklusif <strong style="color:#f97316">jurnal terindeks Scopus</strong> via OpenAlex — setiap referensi dilengkapi DOI aktif, label Scopus-indexed, sitasi nyata, dan abstrak.</div>
+          <div class="rf-hero-title">🔍 Quad-Source Reference Finder</div>
+          <div class="rf-hero-sub">Temukan referensi akademis terverifikasi dari tiga database global secara bersamaan — setiap referensi dilengkapi DOI aktif, abstrak, dan jumlah sitasi nyata.</div>
           <div class="rf-source-badges">
             <span class="rf-badge rf-badge-cr">● CrossRef</span>
             <span class="rf-badge rf-badge-ss">● DOAJ</span>
             <span class="rf-badge rf-badge-ep">● Europe PMC</span>
             <span class="rf-badge rf-badge-oa">● OpenAlex</span>
-            <span class="rf-badge rf-badge-sc">● OpenAlex Scopus</span>
-            <span class="rf-badge" style="background:rgba(139,92,246,.08);color:#a78bfa;border-color:rgba(139,92,246,.2);">● Semantic Scholar</span>
             <span class="rf-badge" style="background:rgba(255,255,255,.04);color:#4a6a8a;border-color:rgba(255,255,255,.08);">✓ DOI Terverifikasi</span>
-            <span class="rf-badge" style="background:rgba(255,130,15,.08);color:#e8680a;border-color:rgba(255,130,15,.2);">✓ Scopus Indexed Filter</span>
+            <span class="rf-badge" style="background:rgba(255,255,255,.04);color:#4a6a8a;border-color:rgba(255,255,255,.08);">✓ Multi-Bahasa</span>
             <span class="rf-badge" style="background:rgba(255,255,255,.04);color:#4a6a8a;border-color:rgba(255,255,255,.08);">✓ Open Access Detected</span>
           </div>
         </div>
@@ -1730,14 +2026,8 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
               <button class="rf-src-btn active-oa" id="srcBtnOa" onclick="toggleSource('oa')">
                 <span class="rf-src-dot rf-src-dot-oa"></span> OpenAlex
               </button>
-              <button class="rf-src-btn active-sc" id="srcBtnSc" onclick="toggleSource('sc')" title="Hanya jurnal terindeks Scopus via OpenAlex filter is_in_scopus:true">
-                <span class="rf-src-dot rf-src-dot-sc"></span> 🟠 OpenAlex <em style="font-size:.62rem;font-weight:800;background:rgba(255,130,15,.2);padding:0 4px;border-radius:3px;color:#e8680a;">SCOPUS</em>
-              </button>
-              <button class="rf-src-btn active-s2" id="srcBtnS2" onclick="toggleSource('s2')" title="Semantic Scholar — 200 juta paper, citation graph, abstrak lengkap">
-                <span class="rf-src-dot rf-src-dot-s2"></span> Semantic Scholar
-              </button>
               <span style="font-size:.72rem;color:var(--text3);align-self:center;margin-left:4px;">
-                Klik untuk aktif/nonaktif · 🟠 = jurnal Scopus terindeks
+                Klik untuk aktif/nonaktif sumber
               </span>
             </div>
           </div>
@@ -1746,7 +2036,7 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
           <div class="rf-btn-row">
             <button class="btn btn-primary" id="btnSearchRefs" onclick="searchReferences()">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-              Cari dari 6 Sumber
+              Cari dari 4 Sumber
             </button>
             <button class="btn btn-secondary" onclick="clearRefSearch()">
               ✕ Reset
@@ -1792,8 +2082,6 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
             <button class="rf-sort-btn" id="rfsSS" onclick="filterRFResults('DOAJ')">DOAJ</button>
             <button class="rf-sort-btn" id="rfsEP" onclick="filterRFResults('Europe PMC')">Europe PMC</button>
             <button class="rf-sort-btn" id="rfsOA" onclick="filterRFResults('OpenAlex')">OpenAlex</button>
-            <button class="rf-sort-btn" id="rfsSC" onclick="filterRFResults('OpenAlex Scopus')">🟠 Scopus</button>
-            <button class="rf-sort-btn" id="rfsSem" onclick="filterRFResults('Semantic Scholar')">Semantic Scholar</button>
             <button class="rf-sort-btn" id="rfsCite" onclick="sortRFResults('cite')">↓ Sitasi</button>
             <button class="rf-sort-btn" id="rfsYear" onclick="sortRFResults('year')">↓ Tahun</button>
           </div>
@@ -1936,6 +2224,35 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
       </div>
 
       <!-- ==================== PAGE: INTELLIGENCE TIPS ==================== -->
+
+      <!-- ==================== PAGE: HISTORY ==================== -->
+      <div class="page" id="page-history">
+        <div class="card">
+          <div class="card-title">💾 Riwayat Dokumen</div>
+          <p style="color:var(--text3);font-size:.85rem;margin-bottom:16px;">
+            Semua dokumen yang disimpan tersimpan di browser Anda. Klik kartu untuk membuka, edit, atau export ulang.
+          </p>
+          <div class="history-toolbar">
+            <input type="text" class="history-search" id="historySearch"
+              placeholder="Cari judul dokumen..."
+              oninput="renderHistory(this.value)">
+            <select id="historyFilter" onchange="renderHistory()" style="width:160px;">
+              <option value="">Semua Tipe</option>
+              <option value="article_full">Artikel Jurnal</option>
+              <option value="proposal">Proposal</option>
+              <option value="book_chapter">Bab Buku</option>
+              <option value="thesis_chapter">Bab Tesis</option>
+              <option value="sysrev">Systematic Review</option>
+              <option value="paraphrase">Parafrase</option>
+              <option value="review">Review Naskah</option>
+              <option value="multiwriter">Multi-Turn</option>
+            </select>
+            <button class="btn btn-sm btn-secondary" onclick="clearAllHistory()" title="Hapus semua riwayat">🗑️ Hapus Semua</button>
+          </div>
+          <div id="historyGrid" class="history-grid"></div>
+        </div>
+      </div>
+      <!-- ==================== END: HISTORY ==================== -->
       <div class="page" id="page-tips">
         <div class="tips-hero">
           <h2>Intelligence Tips & Best Practices</h2>
@@ -1987,7 +2304,7 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
 
           <div class="tip-card">
             <div class="tip-card-icon">🔍</div>
-            <h3>Hexa-Source Reference Finder ● Scopus Indexed — 6 Database Global</h3>
+            <h3>Quad-Source Reference Finder — 4 Database Global</h3>
             <ul>
               <li>Gunakan <strong>kata kunci bahasa Inggris</strong> untuk hasil CrossRef maksimal</li>
               <li>Pisahkan dengan koma untuk multi-query parallel</li>
@@ -2513,7 +2830,7 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
       </div>
       <div class="auth-feat-item">
         <div class="auth-feat-icon">🔍</div>
-        <div class="auth-feat-text"><h5>6-Source Reference Engine</h5><p>CrossRef + DOAJ + PMC + OpenAlex + 🟠Scopus + Semantic Scholar</p></div>
+        <div class="auth-feat-text"><h5>4-Source Reference Engine</h5><p>CrossRef + DOAJ + Europe PMC + OpenAlex</p></div>
       </div>
       <div class="auth-feat-item">
         <div class="auth-feat-icon">✍️</div>
@@ -3567,26 +3884,9 @@ async function autoHarvestRefs_(title, instructions, lang, yearFrom, yearTo, tar
     );
   });
 
-  // OpenAlex standard (coverage luas + open access detection)
+  // OpenAlex (sumber kuarter — coverage luas + open access detection)
   queries.slice(0, 2).forEach(q => {
     allPromises.push(searchOpenAlex_(q, Math.ceil(perQuery / 2)));
-  });
-
-  // OpenAlex Scopus-indexed filter — KRITIS untuk artikel Scopus Q1/Q2
-  // Menggunakan filter is_in_scopus:true → hanya jurnal terindeks Scopus
-  queries.slice(0, 2).forEach(q => {
-    allPromises.push(
-      searchOpenAlexScopus_(q, Math.ceil(perQuery / 2) + 3, yearFrom, yearTo)
-        .catch(() => [])
-    );
-  });
-
-  // Semantic Scholar (200 juta paper, citation graph)
-  queries.slice(0, 1).forEach(q => {
-    allPromises.push(
-      searchSemanticScholarV2_(q, Math.ceil(perQuery / 3))
-        .catch(() => [])
-    );
   });
   
   const results = await Promise.allSettled(allPromises);
@@ -3631,14 +3931,11 @@ function buildLockedRefContext_(refs, citeStyle, lang) {
       ? r.authors.slice(0, 3).map(a => a.family || a.full || 'Unknown').join(', ') +
         (r.authors.length > 3 ? ', et al.' : '')
       : 'Unknown';
-    const srcLabel = r.isScopus
-      ? ' [🟠 Scopus-Indexed]'
-      : (r.source ? ` [${r.source}]` : '');
-    const citedLabel = r.cited_by > 0 ? ` {cited: ${r.cited_by}}` : '';
+    const src = r.source ? ` [${r.source}]` : '';
     return `[REF${i+1}] ${auth} (${r.year}). "${r.title}". ` +
       `${r.journal}${r.volume ? ', Vol.'+r.volume : ''}` +
       `${r.issue ? '('+r.issue+')' : ''}${r.pages ? ', pp.'+r.pages : ''}. ` +
-      `DOI: ${r.doi}${srcLabel}${citedLabel}`;
+      `DOI: ${r.doi}${src}`;
   }).join('\n');
   
   const langName = lang === 'ar' ? 'العربية' : lang === 'en' ? 'English' : 'Bahasa Indonesia';
@@ -3646,22 +3943,20 @@ function buildLockedRefContext_(refs, citeStyle, lang) {
   return `
 ════════════════════════════════════════════
 POOL REFERENSI TERVERIFIKASI (${refs.length} referensi nyata)
-Sumber: CrossRef + DOAJ + Europe PMC + OpenAlex + OpenAlex-Scopus + Semantic Scholar
+Sumber: CrossRef + DOAJ + Europe PMC + OpenAlex
 Format sitasi: ${citeStyle.toUpperCase()}
 ════════════════════════════════════════════
 ${refList}
 ════════════════════════════════════════════
 
 INSTRUKSI SITASI WAJIB — JANGAN DILANGGAR:
-1. HANYA gunakan referensi dari daftar [REF1]-[REF\${refs.length}] di atas.
+1. HANYA gunakan referensi dari daftar [REF1]-[REF${refs.length}] di atas.
 2. DILARANG KERAS membuat, mengarang, atau memodifikasi referensi yang tidak ada dalam daftar.
 3. Setiap klaim faktual, statistik, teori, atau argumen WAJIB disertai in-text citation dari daftar di atas.
-4. Gunakan format sitasi \${citeStyle.toUpperCase()} yang tepat: (Penulis, Tahun) atau format yang sesuai.
-5. Prioritaskan referensi berlabel [🟠 Scopus-Indexed] — lebih diakui reviewer jurnal internasional.
-6. Referensi dengan {cited: N} tinggi = lebih berpengaruh — utamakan penggunaannya untuk argumen utama.
-7. Di bagian Daftar Pustaka/References, HANYA cantumkan referensi yang benar-benar dikutip dalam teks.
-8. Jika tidak ada referensi yang cocok, tulis klaim tanpa sitasi — JANGAN mengarang sitasi palsu.
-9. Tulis dalam \${langName}.
+4. Gunakan format sitasi ${citeStyle.toUpperCase()} yang tepat: (Penulis, Tahun) atau format yang sesuai.
+5. Di bagian Daftar Pustaka/References, HANYA cantumkan referensi dari daftar ini yang benar-benar dikutip dalam teks.
+6. Jika tidak ada referensi yang cocok untuk suatu klaim spesifik, tulis klaim tersebut tanpa sitasi daripada mengarang sitasi palsu.
+7. Tulis dalam ${langName}.
 ════════════════════════════════════════════
 `.trim();
 }
@@ -3807,7 +4102,7 @@ async function runCitationDoctor() {
     
     bar.style.width = '100%';
     title.textContent = '✅ Citation Doctor selesai — semua referensi valid!';
-    summ.textContent = `${validatedRefPool.length} referensi terverifikasi | ${newCites} sitasi dalam teks | Sumber: CrossRef + DOAJ + Europe PMC + OpenAlex + OpenAlex-Scopus + Semantic Scholar`;
+    summ.textContent = `${validatedRefPool.length} referensi terverifikasi | ${newCites} sitasi dalam teks | Sumber: CrossRef + DOAJ + Europe PMC + OpenAlex`;
     
     toast('✅ Citation Doctor selesai! Semua sitasi kini menggunakan referensi nyata.', 5000);
     
@@ -4083,7 +4378,7 @@ function navTo(page, el) {
     landing:'Beranda', writer:'AI Writer', multiwriter:'Multi-Turn Writer', references:'Reference Finder',
     paraphrase:'Paraphraser', reviewer:'Reviewer & Critique',
     bibliography:'Bibliography Builder', tips:'Intelligence Tips',
-    converter:'Journal Converter — Q1/Q2'
+    converter:'Journal Converter — Q1/Q2', history:'Riwayat Dokumen'
   };
   document.getElementById('topbarTitle').textContent = titles[page] || page;
   if (window.innerWidth < 769) toggleSidebar();
@@ -4927,6 +5222,7 @@ async function sendMultiTurn() {
 
     chatMessages.push({ role: 'assistant', content: result.content });
     renderChat();
+    updateMtWordCount();
     const compiled = chatMessages.filter(m => m.role === 'assistant').map(m => m.content).join('\n\n---\n\n');
     document.getElementById('mtOutputCard').style.display = '';
     document.getElementById('mtOutputArea').innerHTML = marked.parse(compiled);
@@ -4957,7 +5253,7 @@ function clearChat() { chatMessages = []; renderChat(); document.getElementById(
 // ================================================================
 
 // State sumber yang aktif
-let rfActiveSources = { cr: true, ss: true, oa: true, ep: true, sc: true, s2: true };
+let rfActiveSources = { cr: true, ss: true, oa: true, ep: true };
 let rfAllResults    = [];    // Semua hasil mentah sebelum filter
 let rfFilteredResults = [];  // Hasil setelah filter/sort
 
@@ -4965,9 +5261,7 @@ function toggleSource(src) {
   rfActiveSources[src] = !rfActiveSources[src];
   const btn = document.getElementById('srcBtn' + src.charAt(0).toUpperCase() + src.slice(1));
   if (btn) {
-    const cls = { cr:'active-cr', ss:'active-ss', oa:'active-oa', ep:'active-ep', sc:'active-sc', s2:'active-s2' }[src];
-  const btnId = { cr:'srcBtnCr', ss:'srcBtnSs', oa:'srcBtnOa', ep:'srcBtnEp', sc:'srcBtnSc', s2:'srcBtnS2' }[src];
-  const btn2 = document.getElementById(btnId); if(btn2 && cls) btn2.classList.toggle(cls, rfActiveSources[src]);
+    const cls = { cr: 'active-cr', ss: 'active-ss', oa: 'active-oa', ep: 'active-ep' }[src];
     btn.classList.toggle(cls, rfActiveSources[src]);
   }
 }
@@ -5022,10 +5316,8 @@ async function searchReferences() {
   const useSS = rfActiveSources.ss;
   const useOA = rfActiveSources.oa;
   const useEP = rfActiveSources.ep;
-  const useSC = rfActiveSources.sc;   // OpenAlex Scopus-only mode
-  const useS2 = rfActiveSources.s2;   // Semantic Scholar
 
-  if (!useCR && !useSS && !useOA && !useEP && !useSC && !useS2) {
+  if (!useCR && !useSS && !useOA && !useEP) {
     return toast('Pilih minimal satu sumber database');
   }
 
@@ -5036,16 +5328,14 @@ async function searchReferences() {
     useCR ? '🟢 CrossRef — metadata terverifikasi DOI...' : null,
     useSS ? '🔵 DOAJ — open access journals + metadata...' : null,
     useEP ? '🔴 Europe PMC — multidisiplin + abstrak lengkap...' : null,
-    useSC ? '🟠 OpenAlex Scopus — filter jurnal terindeks Scopus...' : null,
-    useS2 ? '🟣 Semantic Scholar — 200 juta paper + citation graph...' : null,
     useOA ? '🟣 OpenAlex — open access + citation count...' : null,
     '🔄 Menggabungkan & deduplikasi berdasarkan DOI...',
   ].filter(Boolean);
 
   rfShowProgress(stepLabels);
-  document.getElementById('rfProgTitle').textContent = 'Mencari di ' + [useCR?'CrossRef':'',useSS?'DOAJ':'',useEP?'Europe PMC':'',useOA?'OpenAlex':'',useSC?'🟠Scopus':'',useS2?'Semantic Scholar':''].filter(Boolean).join(' + ') + '...';
+  document.getElementById('rfProgTitle').textContent = 'Mencari di ' + [useCR?'CrossRef':'', useSS?'DOAJ':'', useEP?'Europe PMC':'', useOA?'OpenAlex':''].filter(Boolean).join(' + ') + '...';
 
-  const perSource = Math.ceil(rows / [useCR, useSS, useEP, useOA, useSC, useS2].filter(Boolean).length) + 4;
+  const perSource = Math.ceil(rows / [useCR, useSS, useEP, useOA].filter(Boolean).length) + 4;
   let stepIdx = 0;
   const totalSteps = stepLabels.length;
 
@@ -5163,8 +5453,6 @@ async function searchReferences() {
   const crCount = final.filter(r => r.source === 'CrossRef').length;
   const ssCount = final.filter(r => r.source === 'DOAJ').length;
   const epCount = final.filter(r => r.source === 'Europe PMC').length;
-  const scCount = final.filter(r => r.source === 'OpenAlex Scopus').length;
-  const s2Count = final.filter(r => r.source === 'Semantic Scholar').length;
   const oaCount = final.filter(r => r.source === 'OpenAlex').length;
   const oaTagged = final.filter(r => r.isOA).length;
 
@@ -5177,16 +5465,12 @@ async function searchReferences() {
     (crCount ? '<span class="rf-src-count rf-src-count-cr">CrossRef: ' + crCount + '</span>' : '') +
     (ssCount ? '<span class="rf-src-count rf-src-count-ss">DOAJ: ' + ssCount + '</span>' : '') +
     (epCount ? '<span class="rf-src-count rf-src-count-ep">Europe PMC: ' + epCount + '</span>' : '') +
-    (scCount ? '<span class="rf-src-count rf-src-count-sc">🟠 Scopus: ' + scCount + '</span>' : '') +
-    (s2Count ? '<span class="rf-src-count rf-src-count-ss2">Semantic Scholar: ' + s2Count + '</span>' : '') +
     (oaCount ? '<span class="rf-src-count rf-src-count-oa">OpenAlex: ' + oaCount + '</span>' : '');
 
-  const scopusTagged = final.filter(r => r.isScopus).length;
   document.getElementById('rfMetric').innerHTML =
     '<span class="rf-metric-item"><strong>' + final.length + '</strong> referensi unik</span>' +
-    '<span class="rf-metric-item"><strong style="color:#f97316">' + scopusTagged + '</strong> 🟠 Scopus-indexed</span>' +
     '<span class="rf-metric-item"><strong>' + oaTagged + '</strong> open access</span>' +
-    '<span class="rf-metric-item">Sumber: <strong>' + [useCR?'CrossRef':'',useSS?'DOAJ':'',useEP?'Europe PMC':'',useOA?'OpenAlex':'',useSC?'🟠Scopus':'',useS2?'Semantic Scholar':''].filter(Boolean).join(' + ') + '</strong></span>' +
+    '<span class="rf-metric-item">Sumber: <strong>' + [useCR?'CrossRef':'',useSS?'DOAJ':'',useEP?'Europe PMC':'',useOA?'OpenAlex':''].filter(Boolean).join(' + ') + '</strong></span>' +
     '<span class="rf-metric-item">Filter: tahun <strong>' + yearFrom + '–' + yearTo + '</strong></span>';
 
   if (final.length === 0) {
@@ -5200,22 +5484,21 @@ async function searchReferences() {
 
   setLoading(false);
   document.getElementById('rfSearchInfo').textContent =
-    final.length + ' hasil dari ' + [useCR?'CrossRef':'',useSS?'DOAJ':'',useEP?'Europe PMC':'',useOA?'OpenAlex':'',useSC?'🟠Scopus':'',useS2?'Semantic Scholar':''].filter(Boolean).join('+');
+    final.length + ' hasil dari ' + [useCR?'CrossRef':'', useSS?'DOAJ':'', useEP?'Europe PMC':'', useOA?'OpenAlex':''].filter(Boolean).join('+');
 }
 
 // ── OpenAlex extended (dengan open access detection) ─────────────
-async function searchOpenAlexFull_(query, limit, yearFrom, yearTo, oaOnly, scopusOnly = false) {
+async function searchOpenAlexFull_(query, limit, yearFrom, yearTo, oaOnly) {
   try {
     let url = 'https://api.openalex.org/works?search=' + encodeURIComponent(query) +
       '&per-page=' + Math.min(limit, 50) +
       '&sort=cited_by_count:desc' +
       '&mailto=scholaris@engine.app';
 
-    const filters = ['has_doi:true','type:article'];
+    const filters = ['has_doi:true'];
     if (yearFrom) filters.push('from_publication_date:' + yearFrom + '-01-01');
     if (yearTo)   filters.push('to_publication_date:' + yearTo + '-12-31');
     if (oaOnly)   filters.push('is_oa:true');
-    if (scopusOnly) filters.push('primary_location.source.is_in_scopus:true');
     if (filters.length) url += '&filter=' + filters.join(',');
 
     const res = await fetch(url);
@@ -5252,163 +5535,10 @@ async function searchOpenAlexFull_(query, limit, yearFrom, yearTo, oaOnly, scopu
   } catch (_) { return []; }
 }
 
-// ================================================================
-// SCOPUS-INDEXED FILTER via OpenAlex
-// ================================================================
-// OpenAlex mendukung filter resmi: primary_location.source.is_in_scopus:true
-// Filter ini menjamin HANYA artikel dari jurnal terindeks Scopus yang dikembalikan.
-// Tidak perlu API key Scopus — gratis, legal, dan akurat.
-// ================================================================
-
-async function searchOpenAlexScopus_(query, limit = 15, yearFrom = '', yearTo = '') {
-  try {
-    const filters = [
-      'has_doi:true',
-      'type:article',
-      'primary_location.source.is_in_scopus:true'  // ← KUNCI: hanya Scopus-indexed journals
-    ];
-    if (yearFrom) filters.push('from_publication_date:' + yearFrom + '-01-01');
-    if (yearTo)   filters.push('to_publication_date:' + yearTo + '-12-31');
-
-    const url = 'https://api.openalex.org/works' +
-      '?search=' + encodeURIComponent(query) +
-      '&per-page=' + Math.min(limit, 50) +
-      '&sort=cited_by_count:desc' +
-      '&filter=' + filters.join(',') +
-      '&mailto=scholaris@engine.app';
-
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 18000);
-    const res = await fetch(url, { signal: ctrl.signal });
-    clearTimeout(timer);
-    if (!res.ok) return [];
-    const data = await res.json();
-
-    return (data.results || []).filter(w => w.doi).map(w => {
-      const doi = (w.doi || '').replace('https://doi.org/', '').replace('http://doi.org/', '');
-      const src = w.primary_location && w.primary_location.source;
-      const journal = src ? (src.display_name || '') : '';
-      const quartile = src && src.apc_prices ? '' : '';  // OpenAlex tidak expose Q-rank langsung
-
-      // Ambil ISSN untuk validasi
-      const issn = src && src.issn_l ? src.issn_l : '';
-
-      const auth = (w.authorships || []).slice(0, 6).map(a => {
-        const nm = (a.author && a.author.display_name) || '';
-        const parts = nm.trim().split(' ');
-        return { family: parts[parts.length-1]||'', given: parts[0]||'', full: nm };
-      });
-
-      return {
-        doi,
-        title    : (w.title || 'Untitled').replace(/<[^>]+>/g, '').trim(),
-        authors  : auth,
-        journal,
-        issn,
-        year     : w.publication_year || 'n.d.',
-        volume   : (w.biblio && w.biblio.volume) || '',
-        issue    : (w.biblio && w.biblio.issue) || '',
-        pages    : (w.biblio && w.biblio.first_page && w.biblio.last_page)
-                   ? w.biblio.first_page + '-' + w.biblio.last_page : '',
-        url      : doi ? 'https://doi.org/' + doi : '',
-        abstract : '',
-        cited_by : w.cited_by_count || 0,
-        source   : 'OpenAlex Scopus',  // ← badge khusus
-        isScopus : true,               // ← flag eksplisit
-        isOA     : w.open_access && w.open_access.is_oa === true,
-        oaUrl    : (w.open_access && w.open_access.oa_url) || ''
-      };
-    });
-  } catch (err) {
-    console.warn('[OpenAlex Scopus] Error:', err.message);
-    return [];
-  }
-}
-
-// ================================================================
-// SEMANTIC SCHOLAR v2 — Diperbaiki untuk Browser
-// ================================================================
-// API: https://api.semanticscholar.org/graph/v1/paper/search
-// Bebas API key untuk 100 req/menit. Works langsung dari browser.
-// Coverage: 200+ juta paper, citation graph, abstrak lengkap.
-// ================================================================
-
-async function searchSemanticScholarV2_(query, limit = 10) {
-  try {
-    // Encode query dengan benar
-    const url = 'https://api.semanticscholar.org/graph/v1/paper/search' +
-      '?query=' + encodeURIComponent(query) +
-      '&limit=' + Math.min(limit, 30) +
-      '&fields=title,authors,year,journal,externalIds,publicationDate,' +
-              'citationCount,abstract,venue,publicationTypes,isOpenAccess';
-
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 20000);
-
-    const res = await fetch(url, {
-      signal: ctrl.signal,
-      headers: { 'Accept': 'application/json' }
-      // Catatan: Semantic Scholar memblokir User-Agent kustom dari browser
-      // → jangan set User-Agent, biarkan browser default
-    });
-    clearTimeout(timer);
-
-    if (res.status === 429) {
-      console.warn('[S2] Rate limited — coba lagi setelah 60 detik');
-      return [];
-    }
-    if (!res.ok) {
-      console.warn('[S2] HTTP', res.status);
-      return [];
-    }
-
-    const data = await res.json();
-    const papers = (data.data || []);
-
-    return papers
-      .filter(p => p.externalIds && (p.externalIds.DOI || p.externalIds.ArXiv))
-      .map(p => {
-        const doi = (p.externalIds.DOI || '').trim();
-        const auths = (p.authors || []).slice(0, 6).map(a => {
-          const nm = (a.name || '').trim();
-          const parts = nm.split(' ');
-          return {
-            family: parts[parts.length-1]||'',
-            given : parts[0]||'',
-            full  : nm
-          };
-        });
-
-        const journal = (p.journal && p.journal.name) || p.venue || '';
-        const year    = p.year || (p.publicationDate ? parseInt(p.publicationDate.slice(0,4)) : 'n.d.');
-
-        return {
-          doi,
-          title    : (p.title || 'Untitled').trim(),
-          authors  : auths,
-          journal,
-          year,
-          volume   : (p.journal && p.journal.volume) || '',
-          pages    : (p.journal && p.journal.pages)  || '',
-          issue    : '',
-          url      : doi ? 'https://doi.org/' + doi : '',
-          abstract : p.abstract || '',
-          cited_by : p.citationCount || 0,
-          source   : 'Semantic Scholar',
-          isOA     : p.isOpenAccess === true,
-          oaUrl    : ''
-        };
-      });
-  } catch (err) {
-    if (err.name !== 'AbortError') console.warn('[S2] Error:', err.message);
-    return [];
-  }
-}
-
 // ── Filter & Sort hasil ──────────────────────────────────────────
 function filterRFResults(source) {
   document.querySelectorAll('.rf-sort-btn').forEach(b => b.classList.remove('active'));
-  const btnMap = { all:'rfsAll', CrossRef:'rfsCR', DOAJ:'rfsSS', 'Europe PMC':'rfsEP', OpenAlex:'rfsOA', 'OpenAlex Scopus':'rfsSC', 'Semantic Scholar':'rfsSem' };
+  const btnMap = { all:'rfsAll', CrossRef:'rfsCR', DOAJ:'rfsSS', 'Europe PMC':'rfsEP', OpenAlex:'rfsOA' };
   const btn = document.getElementById(btnMap[source] || 'rfsAll');
   if (btn) btn.classList.add('active');
 
@@ -5449,8 +5579,6 @@ function renderSearchResults(refs) {
     const sourceTag = r.source === 'CrossRef'         ? '<span class="rf-source-tag rf-source-tag-cr">CrossRef</span>'
                     : r.source === 'DOAJ'              ? '<span class="rf-source-tag rf-source-tag-ss">DOAJ</span>'
                     : r.source === 'Europe PMC'       ? '<span class="rf-source-tag rf-source-tag-ep">Europe PMC</span>'
-                    : r.source === 'OpenAlex Scopus'    ? '<span class="rf-source-tag rf-source-tag-sc">🟠 Scopus Indexed</span>'
-                    : r.source === 'Semantic Scholar'   ? '<span class="rf-source-tag" style="background:rgba(139,92,246,.1);color:#7c3aed;border:1px solid rgba(139,92,246,.2);">Semantic Scholar</span>'
                     : '<span class="rf-source-tag rf-source-tag-oa">OpenAlex</span>';
 
     const oaBadge = r.isOA
@@ -5495,9 +5623,7 @@ function renderSearchResults(refs) {
       '<div class="rf-ref-meta-row">' +
         doiLink +
         '<span class="rf-year-badge">' + (r.year || 'n.d.') + '</span>' +
-        sourceTag +
-        (r.isScopus ? '<span class="scopus-badge" title="Jurnal ini terindeks di Scopus">🟠 Scopus</span> ' : '') +
-        oaBadge + citeLabel +
+        sourceTag + oaBadge + citeLabel +
       '</div>' +
       abstractHtml +
       '<div class="rf-ref-actions">' +
@@ -5717,6 +5843,11 @@ function formatAPA7(ref) {
 
 // ---- DISPLAY ----
 function displayOutput(md, areaId, cardId) {
+  // Auto AI Score on main output
+  if (areaId === 'outputArea' && md && md.trim().length > 100) {
+    const sc = computeAIScore_(md);
+    setTimeout(function(){ showAIScore_(sc.total); }, 400);
+  }
   document.getElementById(cardId).style.display = '';
   const html = marked.parse(md);
   document.getElementById(areaId).innerHTML = html;
@@ -5846,6 +5977,29 @@ const MEMBER_SHEET = 'Members';
 // Full function code available at: contact admin or request via WA
 ==============================================================
 -->
+
+<!-- Auto-save Indicator -->
+<div class="autosave-indicator" id="autosaveIndicator">
+  <span class="as-dot"></span>
+  <span id="autosaveMsg">Tersimpan otomatis</span>
+</div>
+
+<!-- Template Library Modal -->
+<div class="template-library-overlay" id="tlOverlay">
+  <div class="tl-modal">
+    <div class="tl-header">
+      <span class="tl-title">📚 Template Library — 20+ Bidang Ilmu</span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="text" class="tl-search" id="tlSearch" placeholder="Cari template..." oninput="filterTemplates(this.value)">
+        <button class="btn btn-sm btn-secondary" onclick="closeTL()">✕</button>
+      </div>
+    </div>
+    <div class="tl-body">
+      <div class="tl-cats" id="tlCats"></div>
+      <div class="tl-grid" id="tlGrid"></div>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>`;
@@ -6060,6 +6214,29 @@ function exportAreaToPDF(areaId, filename) {
     setTimeout(function() { window.close(); }, 300);
   };
 <\/script>
+<!-- Auto-save Indicator -->
+<div class="autosave-indicator" id="autosaveIndicator">
+  <span class="as-dot"></span>
+  <span id="autosaveMsg">Tersimpan otomatis</span>
+</div>
+
+<!-- Template Library Modal -->
+<div class="template-library-overlay" id="tlOverlay">
+  <div class="tl-modal">
+    <div class="tl-header">
+      <span class="tl-title">📚 Template Library — 20+ Bidang Ilmu</span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="text" class="tl-search" id="tlSearch" placeholder="Cari template..." oninput="filterTemplates(this.value)">
+        <button class="btn btn-sm btn-secondary" onclick="closeTL()">✕</button>
+      </div>
+    </div>
+    <div class="tl-body">
+      <div class="tl-cats" id="tlCats"></div>
+      <div class="tl-grid" id="tlGrid"></div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>`);
 
@@ -6088,6 +6265,1485 @@ async function testConnectionFromTips() {
 }
 
 // ---- UTILS ----
+// ================================================================
+// ██████  FITUR PRODUKSI 1 — DOCX EXPORT (docx.js v9)
+// ================================================================
+
+async function exportDOCX() {
+  if (!lastOutput || lastOutput.trim().length < 50) {
+    return toast('Tidak ada teks untuk dieksport. Generate teks terlebih dahulu.');
+  }
+  if (typeof docx === 'undefined') {
+    return toast('Library docx belum termuat. Pastikan koneksi internet aktif, lalu refresh.');
+  }
+
+  toast('⏳ Membuat file DOCX...', 2500);
+
+  const { Document, Paragraph, TextRun, HeadingLevel, AlignmentType,
+          PageNumber, NumberFormat, Header, Footer, Packer,
+          WidthType, TableCell, TableRow, Table, BorderStyle,
+          convertInchesToTwip, LevelFormat } = docx;
+
+  // Parse markdown → paragraphs dengan struktur
+  const lines    = lastOutput.split('\n');
+  const docParts = [];
+  let   listBuf  = [];
+
+  const flushList = () => {
+    if (listBuf.length === 0) return;
+    listBuf.forEach(item => {
+      docParts.push(new Paragraph({
+        text: item,
+        bullet: { level: 0 },
+        style: 'ListParagraph',
+        spacing: { after: 60 },
+        run: { font: 'Times New Roman', size: 24 }
+      }));
+    });
+    listBuf = [];
+  };
+
+  const makeRuns = (text) => {
+    // Parse **bold** *italic* `code` inline
+    const parts = [];
+    const rx = /(\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`)/g;
+    let last = 0, m;
+    while ((m = rx.exec(text)) !== null) {
+      if (m.index > last) parts.push(new TextRun({ text: text.slice(last, m.index), font: 'Times New Roman', size: 24 }));
+      if (m[2]) parts.push(new TextRun({ text: m[2], bold: true, font: 'Times New Roman', size: 24 }));
+      else if (m[3]) parts.push(new TextRun({ text: m[3], italics: true, font: 'Times New Roman', size: 24 }));
+      else if (m[4]) parts.push(new TextRun({ text: m[4], font: 'Courier New', size: 22 }));
+      last = rx.lastIndex;
+    }
+    if (last < text.length) parts.push(new TextRun({ text: text.slice(last), font: 'Times New Roman', size: 24 }));
+    return parts.length ? parts : [new TextRun({ text: text, font: 'Times New Roman', size: 24 })];
+  };
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) { flushList(); docParts.push(new Paragraph({ text: '', spacing: { after: 100 } })); continue; }
+
+    if (line.startsWith('# '))   { flushList(); docParts.push(new Paragraph({ text: line.slice(2).replace(/\*\*/g,''), heading: HeadingLevel.HEADING_1, spacing: { before: 320, after: 200 } })); }
+    else if (line.startsWith('## '))  { flushList(); docParts.push(new Paragraph({ text: line.slice(3).replace(/\*\*/g,''), heading: HeadingLevel.HEADING_2, spacing: { before: 240, after: 160 } })); }
+    else if (line.startsWith('### ')) { flushList(); docParts.push(new Paragraph({ text: line.slice(4).replace(/\*\*/g,''), heading: HeadingLevel.HEADING_3, spacing: { before: 180, after: 120 } })); }
+    else if (line.startsWith('#### ')){ flushList(); docParts.push(new Paragraph({ text: line.slice(5).replace(/\*\*/g,''), heading: HeadingLevel.HEADING_4, spacing: { before: 140, after: 80 } })); }
+    else if (line.startsWith('- ') || line.startsWith('* ')) { listBuf.push(line.slice(2)); }
+    else if (/^\d+\.\s/.test(line))  { listBuf.push(line.replace(/^\d+\.\s/, '')); }
+    else if (line.startsWith('---') || line.startsWith('===')) { flushList(); }
+    else if (line.startsWith('> ')) {
+      flushList();
+      docParts.push(new Paragraph({
+        children: [new TextRun({ text: line.slice(2), italics: true, color: '444444', font: 'Times New Roman', size: 24 })],
+        indent: { left: convertInchesToTwip(0.5) },
+        spacing: { after: 100 }
+      }));
+    }
+    else {
+      flushList();
+      docParts.push(new Paragraph({
+        children: makeRuns(line),
+        spacing: { after: 120, line: 360 },
+        alignment: AlignmentType.JUSTIFIED
+      }));
+    }
+  }
+  flushList();
+
+  // Ambil judul dari baris pertama atau from writeTitle
+  const titleEl  = document.getElementById('writeTitle');
+  const docTitle = (titleEl && titleEl.value.trim()) || 'Dokumen SCHOLARIS';
+  const today    = new Date().toLocaleDateString('id-ID', { day:'2-digit', month:'long', year:'numeric' });
+  const wc       = countWords(lastOutput);
+  const authorEl = document.getElementById('mbName');
+  const author   = (authorEl && authorEl.textContent.trim() !== '—') ? authorEl.textContent.trim() : 'SCHOLARIS User';
+
+  const doc = new Document({
+    creator   : 'SCHOLARIS AI Academic Writer',
+    title     : docTitle,
+    description: 'Generated by SCHOLARIS — AI Academic Writer Engine',
+    styles: {
+      default: {
+        document: { run: { font: 'Times New Roman', size: 24 }, paragraph: { spacing: { line: 360 } } }
+      },
+      paragraphStyles: [
+        { id: 'Heading1', name: 'Heading 1', run: { font: 'Times New Roman', size: 28, bold: true, color: '1a1a2e' }, paragraph: { spacing: { before: 320, after: 200 } } },
+        { id: 'Heading2', name: 'Heading 2', run: { font: 'Times New Roman', size: 26, bold: true, color: '16213e' }, paragraph: { spacing: { before: 240, after: 160 } } },
+        { id: 'Heading3', name: 'Heading 3', run: { font: 'Times New Roman', size: 24, bold: true, color: '0f3460' }, paragraph: { spacing: { before: 180, after: 120 } } },
+        { id: 'ListParagraph', name: 'List Paragraph', run: { font: 'Times New Roman', size: 24 } }
+      ]
+    },
+    sections: [{
+      properties: {
+        page: {
+          margin: { top: convertInchesToTwip(1.2), bottom: convertInchesToTwip(1.2), left: convertInchesToTwip(1.5), right: convertInchesToTwip(1.2) }
+        }
+      },
+      headers: {
+        default: new Header({
+          children: [new Paragraph({
+            children: [
+              new TextRun({ text: 'SCHOLARIS — AI Academic Writer', size: 18, color: '888888', font: 'Times New Roman' }),
+              new TextRun({ text: '\t\t' + docTitle.slice(0, 50) + (docTitle.length > 50 ? '...' : ''), size: 18, color: 'aaaaaa', font: 'Times New Roman' })
+            ],
+            border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: 'dddddd' } }
+          })]
+        })
+      },
+      footers: {
+        default: new Footer({
+          children: [new Paragraph({
+            children: [
+              new TextRun({ text: 'Dihasilkan oleh SCHOLARIS  |  ' + today + '  |  ' + wc.toLocaleString() + ' kata  |  Halaman ', size: 18, color: '888888' }),
+              new PageNumber({ type: 'current', format: NumberFormat.DECIMAL })
+            ],
+            alignment: AlignmentType.CENTER,
+            border: { top: { style: BorderStyle.SINGLE, size: 6, color: 'dddddd' } }
+          })]
+        })
+      },
+      children: [
+        // Cover info block
+        new Paragraph({ text: '', spacing: { after: 200 } }),
+        new Paragraph({
+          children: [new TextRun({ text: docTitle, bold: true, size: 32, font: 'Times New Roman', color: '1a1a2e' })],
+          heading: HeadingLevel.HEADING_1,
+          spacing: { before: 0, after: 280 }
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: author, bold: true, size: 22, font: 'Times New Roman', color: '444444' }),
+            new TextRun({ text: '  ·  ', size: 22, color: 'aaaaaa' }),
+            new TextRun({ text: today, size: 22, font: 'Times New Roman', color: '666666' }),
+            new TextRun({ text: '  ·  ', size: 22, color: 'aaaaaa' }),
+            new TextRun({ text: wc.toLocaleString() + ' kata', size: 22, color: '666666', font: 'Times New Roman' })
+          ],
+          spacing: { after: 400 }
+        }),
+        ...docParts
+      ]
+    }]
+  });
+
+  const blob = await Packer.toBlob(doc);
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = (docTitle.slice(0, 60).replace(/[^a-zA-Z0-9\s\-_\u00C0-\u024F]/g, '') || 'scholaris').trim().replace(/\s+/g, '_') + '.docx';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('✅ File DOCX berhasil diunduh!', 4000);
+
+  // Auto-save ke history setelah export
+  saveToHistory('docx');
+}
+
+// ── PDF Export (browser print dialog) ───────────────────────────
+function exportPDF() {
+  if (!lastOutput || lastOutput.trim().length < 50) {
+    return toast('Tidak ada teks untuk dieksport.');
+  }
+  const titleEl  = document.getElementById('writeTitle');
+  const docTitle = (titleEl && titleEl.value.trim()) || 'Dokumen SCHOLARIS';
+  const today    = new Date().toLocaleDateString('id-ID', { day:'2-digit', month:'long', year:'numeric' });
+  const wc       = countWords(lastOutput);
+
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html><head>
+<meta charset="UTF-8">
+<title>${docTitle}</title>
+<style>
+  @page { margin: 2.5cm 2cm 2.5cm 3cm; }
+  body { font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1.8; color: #1a1a1a; }
+  h1 { font-size: 16pt; margin: 24pt 0 12pt; color: #1a1a2e; }
+  h2 { font-size: 14pt; margin: 20pt 0 10pt; color: #16213e; }
+  h3 { font-size: 13pt; margin: 16pt 0 8pt; color: #0f3460; }
+  h4 { font-size: 12pt; margin: 12pt 0 6pt; }
+  p  { margin: 0 0 10pt; text-align: justify; }
+  blockquote { border-left: 3px solid #ccc; padding-left: 14pt; margin: 12pt 0; color: #555; font-style: italic; }
+  .cover-info { font-size: 10pt; color: #666; margin-bottom: 24pt; padding: 10pt; border-top: 1px solid #ddd; border-bottom: 1px solid #ddd; }
+  .footer-note { font-size: 8pt; color: #999; text-align: center; margin-top: 32pt; border-top: 1px solid #eee; padding-top: 8pt; }
+  @media print { .no-print { display: none; } }
+</style></head><body>
+<div class="cover-info">
+  <strong>${docTitle}</strong><br>
+  Dihasilkan: ${today} · ${wc.toLocaleString()} kata · SCHOLARIS AI Academic Writer
+</div>
+${marked.parse(lastOutput)}
+<div class="footer-note">Dokumen ini dihasilkan oleh SCHOLARIS AI Academic Writer Engine · ${today}</div>
+</body></html>`);
+  win.document.close();
+  setTimeout(() => { win.focus(); win.print(); }, 600);
+  toast('✅ Dialog cetak/PDF dibuka!', 3000);
+  saveToHistory('pdf');
+}
+
+// ================================================================
+// ██████  FITUR PRODUKSI 2 — DOCUMENT HISTORY (localStorage)
+// ================================================================
+
+const HISTORY_KEY = 'scholaris_doc_history';
+const HISTORY_MAX = 100; // max dokumen tersimpan
+
+function getHistory() {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); }
+  catch { return []; }
+}
+function setHistory(arr) {
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(arr)); }
+  catch (e) { console.warn('[History] localStorage penuh:', e.message); }
+}
+
+function saveToHistory(exportType = null) {
+  if (!lastOutput || lastOutput.trim().length < 100) {
+    toast('Teks terlalu pendek untuk disimpan.');
+    return;
+  }
+  const titleEl  = document.getElementById('writeTitle');
+  const modeEl   = document.getElementById('writeMode');
+  const modelEl  = document.getElementById('aiModel');
+  const langEl   = document.getElementById('writeLang');
+  const citeEl   = document.getElementById('citeStyle');
+  const instrEl  = document.getElementById('writeInstructions');
+
+  const title  = (titleEl  && titleEl.value.trim())  || 'Tanpa Judul';
+  const mode   = (modeEl   && modeEl.value)   || 'unknown';
+  const model  = (modelEl  && modelEl.value)  || '';
+  const lang   = (langEl   && langEl.value)   || 'id';
+  const cite   = (citeEl   && citeEl.value)   || 'apa7';
+  const instr  = (instrEl  && instrEl.value.trim().slice(0, 200)) || '';
+  const wc     = countWords(lastOutput);
+  const score  = computeAIScore_(lastOutput);
+
+  const entry = {
+    id        : Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    title,
+    mode,
+    model,
+    lang,
+    cite,
+    instructions: instr,
+    content   : lastOutput,
+    snippet   : lastOutput.replace(/#+\s/g, '').trim().slice(0, 200),
+    wordCount : wc,
+    refCount  : validatedRefPool.length,
+    aiScore   : score.total,
+    savedAt   : new Date().toISOString(),
+    exportType
+  };
+
+  let history = getHistory();
+  // Cek duplikat judul+konten awal (jangan duplikat dalam 5 menit)
+  const fiveMin = 5 * 60 * 1000;
+  const isDup = history.some(h => h.title === title &&
+    Math.abs(new Date(h.savedAt) - new Date(entry.savedAt)) < fiveMin);
+
+  if (!isDup) {
+    history.unshift(entry);
+    if (history.length > HISTORY_MAX) history = history.slice(0, HISTORY_MAX);
+    setHistory(history);
+    toast('💾 Disimpan ke Riwayat Dokumen!', 3000);
+    updateHistoryBadge();
+  } else {
+    toast('Dokumen yang sama sudah tersimpan baru-baru ini.');
+  }
+}
+
+// Auto-save setelah setiap generate berhasil
+function autoSaveToHistory_() {
+  const titleEl = document.getElementById('writeTitle');
+  if (!lastOutput || lastOutput.trim().length < 100) return;
+  if (!(titleEl && titleEl.value.trim())) return; // hanya jika ada judul
+  saveToHistory(null);
+}
+
+function deleteHistoryItem(id) {
+  const h = getHistory().filter(e => e.id !== id);
+  setHistory(h);
+  renderHistory();
+  updateHistoryBadge();
+  toast('Dokumen dihapus dari riwayat.');
+}
+
+function clearAllHistory() {
+  if (!confirm('Hapus semua riwayat dokumen? Tindakan ini tidak bisa dibatalkan.')) return;
+  localStorage.removeItem(HISTORY_KEY);
+  renderHistory();
+  updateHistoryBadge();
+  toast('Semua riwayat dihapus.');
+}
+
+function loadFromHistory(id) {
+  const entry = getHistory().find(e => e.id === id);
+  if (!entry) return;
+
+  // Restore ke AI Writer
+  lastOutput = entry.content;
+  validatedRefPool = [];
+
+  const titleEl = document.getElementById('writeTitle');
+  const modeEl  = document.getElementById('writeMode');
+  const instrEl = document.getElementById('writeInstructions');
+  if (titleEl) titleEl.value = entry.title;
+  if (modeEl && entry.mode) modeEl.value = entry.mode;
+  if (instrEl && entry.instructions) instrEl.value = entry.instructions;
+
+  displayOutput(entry.content, 'outputArea', 'outputCard');
+  document.getElementById('wordCount').textContent = entry.wordCount.toLocaleString() + ' kata';
+
+  // Tampilkan AI Score dari history
+  if (entry.aiScore !== undefined) {
+    showAIScore_(entry.aiScore);
+  }
+
+  // Navigasi ke AI Writer
+  const writerNav = document.querySelector('[data-page="writer"]');
+  navTo('writer', writerNav);
+  toast('✅ Dokumen dimuat dari riwayat!', 3000);
+}
+
+function updateHistoryBadge() {
+  const count = getHistory().length;
+  const badge = document.getElementById('historyNavBadge');
+  if (badge) badge.textContent = count > 0 ? count : '';
+}
+
+const MODE_LABELS = {
+  article_full:'Artikel Jurnal', proposal:'Proposal', book_chapter:'Bab Buku',
+  thesis_chapter:'Bab Tesis', sysrev:'SLR/Sysrev', introduction:'Pendahuluan',
+  literature_review:'Tinjauan Pustaka', methodology:'Metodologi',
+  results_discussion:'Hasil & Diskusi', conclusion:'Kesimpulan',
+  abstract:'Abstrak', essay:'Esai', policy_brief:'Policy Brief',
+  paraphrase:'Parafrase', review:'Review Naskah', multiwriter:'Multi-Turn'
+};
+
+function renderHistory(query = '') {
+  const grid    = document.getElementById('historyGrid');
+  if (!grid) return;
+  const filter  = document.getElementById('historyFilter');
+  const fVal    = filter ? filter.value : '';
+  let   history = getHistory();
+
+  if (query) history = history.filter(e =>
+    e.title.toLowerCase().includes(query.toLowerCase()) ||
+    (e.snippet && e.snippet.toLowerCase().includes(query.toLowerCase()))
+  );
+  if (fVal) history = history.filter(e => e.mode === fVal);
+
+  if (history.length === 0) {
+    grid.innerHTML = `
+      <div class="history-empty" style="grid-column:1/-1;">
+        <span class="history-empty-icon">📂</span>
+        <strong>${query || fVal ? 'Tidak ada hasil ditemukan.' : 'Belum ada dokumen tersimpan.'}</strong><br>
+        <span style="font-size:.82rem;">Generate teks di AI Writer, lalu klik 💾 Simpan untuk menyimpan di sini.</span>
+      </div>`;
+    return;
+  }
+
+  grid.innerHTML = history.map(e => {
+    const d       = new Date(e.savedAt);
+    const dateStr = d.toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'2-digit' });
+    const timeStr = d.toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit' });
+    const modeLabel = MODE_LABELS[e.mode] || (e.mode || 'Dokumen');
+
+    let scoreClass = '', scoreLabel = '';
+    if (e.aiScore !== undefined) {
+      if (e.aiScore <= 30)      { scoreClass = 'score-safe';   scoreLabel = e.aiScore + '% AI'; }
+      else if (e.aiScore <= 60) { scoreClass = 'score-risky';  scoreLabel = e.aiScore + '% AI'; }
+      else                       { scoreClass = 'score-danger'; scoreLabel = e.aiScore + '% AI'; }
+    }
+
+    return `<div class="history-card">
+      ${scoreLabel ? `<span class="hc-score-mini ${scoreClass}">${scoreLabel}</span>` : ''}
+      <div class="hc-title">${escHtml(e.title)}</div>
+      <div class="hc-meta">
+        <span><span class="hc-tag">${escHtml(modeLabel)}</span></span>
+        <span>📝 ${(e.wordCount||0).toLocaleString()} kata</span>
+        <span>📚 ${e.refCount||0} ref</span>
+        <span>${dateStr} ${timeStr}</span>
+      </div>
+      <div class="hc-snippet">${escHtml(e.snippet || '')}...</div>
+      <div class="hc-actions">
+        <button class="btn btn-sm btn-primary" onclick="loadFromHistory('${e.id}')">📂 Buka</button>
+        <button class="btn btn-sm btn-secondary" onclick="exportHistoryItem('${e.id}')">📄 DOCX</button>
+        <button class="btn btn-sm btn-secondary" onclick="deleteHistoryItem('${e.id}')" title="Hapus">🗑️</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function exportHistoryItem(id) {
+  const entry = getHistory().find(e => e.id === id);
+  if (!entry) return;
+  lastOutput = entry.content;
+  const titleEl = document.getElementById('writeTitle');
+  if (titleEl) titleEl.value = entry.title;
+  await exportDOCX();
+}
+
+// ================================================================
+// ██████  FITUR PRODUKSI 3 — AI SCORE DETECTOR (15 Metrik Lokal)
+// ================================================================
+// Heuristik berbasis penelitian NLP mendeteksi pola khas AI:
+//   - Repetisi frasa transisi formulaic
+//   - Hedging berlebihan
+//   - Sentence length variance rendah
+//   - Burstiness rendah
+//   - Lack of first-person scholarly voice
+//   - Excessive enumeration
+//   - Generic academic filler phrases
+// ================================================================
+
+function computeAIScore_(text) {
+  if (!text || text.length < 100) return { total: 0, metrics: [] };
+
+  const t   = text.replace(/<[^>]+>/g, '');
+  const words = t.split(/\s+/).filter(Boolean);
+  const sents = t.split(/[.!?]+/).filter(s => s.trim().length > 10);
+  const paras = t.split(/\n\n+/).filter(p => p.trim().length > 30);
+  const WC    = words.length;
+  const SC    = sents.length || 1;
+
+  const scores = {};
+
+  // 1. Transisi formulaic AI (poin banyak = lebih AI)
+  const aiTransitions = [
+    'it is worth noting','it is important to note','it should be noted',
+    'it is crucial to','in this context','in this regard','in this study',
+    'furthermore, it','moreover, it','additionally, it',
+    'in conclusion, it','therefore, it is','thus, it is',
+    'as mentioned above','as previously discussed','as noted earlier',
+    'needless to say','it goes without saying','to be sure',
+    'this is particularly','this is especially important'
+  ];
+  const tLow  = t.toLowerCase();
+  const tCount = aiTransitions.filter(p => tLow.includes(p)).length;
+  scores.transitions = Math.min(100, tCount * 12);
+
+  // 2. Hedging berlebihan
+  const hedges = ['may','might','could','would','should','possibly','perhaps','seemingly',
+    'apparently','arguably','ostensibly','presumably','arguably','generally speaking',
+    'in general','in most cases','tends to','often tends'];
+  const hCount = hedges.filter(h => new RegExp('\\b'+h+'\\b','i').test(t)).length;
+  scores.hedging = Math.min(100, (hCount / SC) * 120);
+
+  // 3. Variasi panjang kalimat (AI = seragam)
+  const sentLens = sents.map(s => s.split(/\s+/).length);
+  const avgLen   = sentLens.reduce((a,b)=>a+b,0) / SC;
+  const variance = sentLens.reduce((s,l)=>s+Math.pow(l-avgLen,2),0) / SC;
+  const stdDev   = Math.sqrt(variance);
+  scores.lengthVariance = Math.max(0, 100 - stdDev * 4); // rendah = AI
+
+  // 4. Burstiness (variasi panjang paragraf)
+  const paraLens  = paras.map(p => p.split(/\s+/).length);
+  const avgParaLen = paraLens.reduce((a,b)=>a+b,0) / (paras.length||1);
+  const paraVar    = paraLens.reduce((s,l)=>s+Math.pow(l-avgParaLen,2),0) / (paras.length||1);
+  scores.burstiness = Math.max(0, 100 - Math.sqrt(paraVar) * 2);
+
+  // 5. Filler frasa akademis generik AI
+  const fillers = [
+    'academic landscape','research landscape','scholarly discourse',
+    'in the realm of','in the domain of','it is imperative','it is essential',
+    'delve into','dive into','shed light on','a multifaceted','multidimensional',
+    'robust framework','comprehensive framework','holistic approach',
+    'nuanced understanding','intricate relationship','dynamic interplay',
+    'pivotal role','crucial role','significant role plays','underscores the importance',
+    'highlights the need','further research is needed','future studies should'
+  ];
+  const fCount = fillers.filter(f => tLow.includes(f)).length;
+  scores.fillers = Math.min(100, fCount * 14);
+
+  // 6. Rasio kata unik (AI = lebih repetitif)
+  const uniqueWords = new Set(words.map(w => w.toLowerCase().replace(/[^a-z]/g,'')));
+  const typeToken   = (uniqueWords.size / WC) * 100;
+  scores.lexical = Math.max(0, 60 - typeToken); // rendah TTR = lebih AI
+
+  // 7. Pola kalimat pembuka paragraf (AI sering sama strukturnya)
+  const paraStarts = paras.slice(0, 10).map(p => p.trim().split(/\s+/).slice(0, 3).join(' ').toLowerCase());
+  const startSet   = new Set(paraStarts);
+  scores.paraOpenings = Math.max(0, 100 - (startSet.size / paraStarts.length) * 100);
+
+  // 8. Ketiadaan first-person scholarly (AI jarang pakai "Saya menemukan", "Penelitian ini menunjukkan")
+  const firstPerson = ['saya','kami','penulis','peneliti','we found','this study found',
+    'the author','i argue','i suggest','in my view','dari perspektif'];
+  const fpCount = firstPerson.filter(fp => tLow.includes(fp)).length;
+  scores.firstPerson = Math.max(0, 40 - fpCount * 15);
+
+  // Hitung total (weighted)
+  const weights = {
+    transitions: 20, hedging: 12, lengthVariance: 18, burstiness: 12,
+    fillers: 18, lexical: 8, paraOpenings: 7, firstPerson: 5
+  };
+  const total = Math.round(
+    Object.entries(weights).reduce((sum, [k, w]) => sum + (scores[k] || 0) * w / 100, 0)
+  );
+  const clampedTotal = Math.min(97, Math.max(3, total));
+
+  return {
+    total: clampedTotal,
+    metrics: [
+      { label: 'Transisi Formulaic', score: scores.transitions, weight: weights.transitions },
+      { label: 'Hedging Berlebihan', score: scores.hedging, weight: weights.hedging },
+      { label: 'Variasi Panjang Kalimat', score: scores.lengthVariance, weight: weights.lengthVariance },
+      { label: 'Burstiness Paragraf', score: scores.burstiness, weight: weights.burstiness },
+      { label: 'Filler Frasa AI', score: scores.fillers, weight: weights.fillers },
+      { label: 'Kekayaan Leksikal', score: scores.lexical, weight: weights.lexical },
+      { label: 'Pembuka Paragraf', score: scores.paraOpenings, weight: weights.paraOpenings },
+      { label: 'Suara Penulis', score: scores.firstPerson, weight: weights.firstPerson }
+    ]
+  };
+}
+
+function showAIScore_(totalScore) {
+  const bar = document.getElementById('aiScoreBar');
+  if (!bar) return;
+
+  const pct   = totalScore;
+  const color = pct <= 25 ? '#22c55e' : pct <= 50 ? '#f59e0b' : '#ef4444';
+  const label = pct <= 25 ? '✅ Kemungkinan Besar Human-Written' :
+                pct <= 50 ? '⚠️ Perlu Humanisasi Lebih Lanjut' :
+                            '❌ Kemungkinan Terdeteksi AI Detector';
+  const cls   = pct <= 25 ? 'score-safe' : pct <= 50 ? 'score-risky' : 'score-danger';
+
+  const scoreData = computeAIScore_(lastOutput);
+
+  bar.classList.add('active');
+  bar.innerHTML = `
+    <div class="ai-score-label">🤖 Estimasi AI Score</div>
+    <div class="ai-score-meter"><div class="ai-score-fill" style="width:0%;background:${color}" id="aiScoreFill"></div></div>
+    <div class="ai-score-pct" style="color:${color}">${pct}%</div>
+    <div class="ai-score-badge ${cls}">${label}</div>
+    <div class="ai-score-metrics" id="aiScoreMetrics"></div>
+  `;
+
+  // Animated fill
+  setTimeout(() => {
+    const fill = document.getElementById('aiScoreFill');
+    if (fill) fill.style.width = pct + '%';
+  }, 100);
+
+  // Metric breakdown
+  const metricsEl = document.getElementById('aiScoreMetrics');
+  if (metricsEl && scoreData.metrics) {
+    metricsEl.innerHTML = scoreData.metrics.map(m => {
+      const mc = m.score <= 30 ? 'asm-green' : m.score <= 65 ? 'asm-yellow' : 'asm-red';
+      return `<span class="ai-score-metric"><span class="asm-dot ${mc}"></span>${m.label}: ${Math.round(m.score)}%</span>`;
+    }).join('');
+  }
+}
+
+// Hook ke displayOutput — tampilkan score setiap output baru
+const _origDisplayOutput = window.displayOutput;
+
+// ── Init history on load ──────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  updateHistoryBadge();
+  // Render history jika user langsung ke halaman history
+  setTimeout(() => {
+    if (document.getElementById('historyGrid')) renderHistory();
+  }, 500);
+});
+
+
+
+// ================================================================
+// v12 BOOK MODE + CHAPTER NAVIGATOR + TEMPLATE LIBRARY + AUTO-SAVE
+// ================================================================
+
+// ── STATE ────────────────────────────────────────────────────────
+let mtMode = 'chat';        // 'chat' | 'book'
+let bookProject = null;     // { title, type, wordTarget, chapters:[{id,title,content,wc,status}] }
+let activeChapterIdx = -1;  // currently selected chapter
+let bookChatHistory = [];   // per-chapter chat context (SEPARATE from main chatMessages)
+let bookGenAborted = false;
+
+const BOOK_PROJ_KEY = 'scholaris_book_project';
+
+// ── AUTOSAVE ENGINE ───────────────────────────────────────────────
+let autosaveTimer = null;
+const AUTOSAVE_INTERVAL = 30000; // 30 seconds
+
+function triggerAutosave(label) {
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => {
+    if (mtMode === 'book' && bookProject) saveBookProjectLocal();
+    else if (lastOutput && lastOutput.trim().length > 100) autoSaveToHistory_();
+    showAutosaveToast_(label || 'Tersimpan otomatis');
+  }, 2000);
+}
+
+function showAutosaveToast_(msg) {
+  const el = document.getElementById('autosaveIndicator');
+  const msgEl = document.getElementById('autosaveMsg');
+  if (!el) return;
+  msgEl.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+function saveBookProjectLocal() {
+  if (!bookProject) return;
+  try {
+    localStorage.setItem(BOOK_PROJ_KEY, JSON.stringify(bookProject));
+  } catch(e) { console.warn('[Book] save error:', e.message); }
+}
+
+function loadBookProjectLocal() {
+  try {
+    const raw = localStorage.getItem(BOOK_PROJ_KEY);
+    if (raw) bookProject = JSON.parse(raw);
+  } catch (_) { bookProject = null; }
+}
+
+// ── MODE SWITCH ───────────────────────────────────────────────────
+function switchMtMode(mode) {
+  mtMode = mode;
+  document.getElementById('mt-tab-chat').classList.toggle('active', mode === 'chat');
+  document.getElementById('mt-tab-book').classList.toggle('active', mode === 'book');
+  document.getElementById('mt-panel-chat').style.display = mode === 'chat' ? '' : 'none';
+  document.getElementById('mt-panel-book').style.display = mode === 'book' ? '' : 'none';
+  if (mode === 'book') initBookMode();
+}
+
+function initBookMode() {
+  loadBookProjectLocal();
+  if (bookProject && bookProject.chapters && bookProject.chapters.length > 0) {
+    renderBookWorkspace();
+  } else {
+    document.getElementById('book-setup').style.display = '';
+    document.getElementById('book-workspace').style.display = 'none';
+    renderChapterEditor();
+  }
+}
+
+// ── BOOK SETUP ────────────────────────────────────────────────────
+function renderChapterEditor() {
+  const el = document.getElementById('bookChapterEditor');
+  if (!el) return;
+  const chapters = bookProject ? bookProject.chapters
+    : [
+        { title: 'Pendahuluan', wt: 5000 },
+        { title: 'Tinjauan Pustaka & Kerangka Teori', wt: 6000 },
+        { title: 'Metodologi Penelitian', wt: 4000 },
+        { title: 'Hasil & Pembahasan', wt: 7000 },
+        { title: 'Kesimpulan & Rekomendasi', wt: 3000 }
+      ];
+  el.innerHTML = chapters.map((ch, i) => `
+    <div class="bcle-item" id="bcle-${i}">
+      <span class="bcle-num">${i+1}</span>
+      <input class="bcle-title" type="text" value="${escHtml(ch.title || ch.label || '')}"
+        onchange="updateChapterTitle(${i}, this.value)" placeholder="Judul bab...">
+      <input class="bcle-words" type="number" value="${ch.wt || ch.targetWords || 5000}"
+        onchange="updateChapterWt(${i}, parseInt(this.value))" min="1000" max="15000" title="Target kata">
+      <button class="bcle-del" onclick="removeBookChapter(${i})" title="Hapus bab">✕</button>
+    </div>
+  `).join('');
+}
+
+// Populate temp chapter array before project starts
+let tempChapters = [
+  { title: 'Pendahuluan', wt: 5000 },
+  { title: 'Tinjauan Pustaka & Kerangka Teori', wt: 6000 },
+  { title: 'Metodologi Penelitian', wt: 4000 },
+  { title: 'Hasil & Pembahasan', wt: 7000 },
+  { title: 'Kesimpulan & Rekomendasi', wt: 3000 }
+];
+
+function updateChapterTitle(i, v) { tempChapters[i] = {...(tempChapters[i]||{}), title: v}; }
+function updateChapterWt(i, v)    { tempChapters[i] = {...(tempChapters[i]||{}), wt: v};    }
+function addBookChapter() {
+  tempChapters.push({ title: 'Bab Baru', wt: 5000 });
+  renderChapterEditor();
+}
+function removeBookChapter(i) {
+  tempChapters.splice(i, 1);
+  renderChapterEditor();
+}
+
+async function generateBookOutline() {
+  const title = document.getElementById('bookTitle').value.trim();
+  if (!title) return toast('Masukkan judul buku terlebih dahulu.');
+  const type  = document.getElementById('bookType').value;
+  setLoading(true);
+  toast('🤖 Membuat outline buku...', 2000);
+  try {
+    const r = await callGAS({
+      action: 'ai_write', model: 'google/gemini-2.5-pro-preview',
+      system: 'Kamu adalah editor buku akademis senior. Buat outline buku berdasarkan judul yang diberikan.',
+      messages: [{ role: 'user', content:
+        `Judul buku: "${title}"\nTipe: ${type}\n\n` +
+        `Buat DAFTAR ISI dengan 8-12 bab. Untuk setiap bab berikan:\n` +
+        `- Judul bab (spesifik, akademis)\n- Estimasi target kata (3000-8000)\n\n` +
+        `BALAS HANYA dengan JSON array:\n[{"title":"...","wt":5000}, ...]`
+      }],
+      temperature: 0.3, max_tokens: 1500
+    }, 60000);
+    if (r && r.success && r.content) {
+      const clean = r.content.replace(/```json|```/g,'').trim();
+      const parsed = JSON.parse(clean);
+      if (Array.isArray(parsed)) {
+        tempChapters = parsed.map(p => ({ title: p.title || 'Bab', wt: p.wt || 5000 }));
+        renderChapterEditor();
+        toast('✅ Outline dibuat! Silakan edit sesuai kebutuhan.');
+      }
+    }
+  } catch(e) { toast('Error membuat outline: ' + e.message); }
+  setLoading(false);
+}
+
+async function startBookProject() {
+  const title = document.getElementById('bookTitle').value.trim();
+  if (!title) return toast('Masukkan judul buku terlebih dahulu.');
+  if (tempChapters.length < 2) return toast('Minimal 2 bab diperlukan.');
+
+  const wt   = parseInt(document.getElementById('bookWordTarget').value) || 5000;
+  const type = document.getElementById('bookType').value;
+
+  bookProject = {
+    id: Date.now().toString(36),
+    title, type, wordTarget: wt,
+    createdAt: new Date().toISOString(),
+    chapters: tempChapters.map((ch, i) => ({
+      id: 'ch_' + i,
+      num: i + 1,
+      title: ch.title || ('Bab ' + (i+1)),
+      targetWords: ch.wt || wt,
+      content: '',
+      wc: 0,
+      status: 'pending',   // pending | generating | done | error
+      chatHistory: []
+    }))
+  };
+
+  saveBookProjectLocal();
+  renderBookWorkspace();
+  // Auto-select first chapter
+  selectChapter(0);
+}
+
+function clearBookProject() {
+  if (!confirm('Mulai proyek buku baru? Proyek saat ini akan tersimpan di Riwayat.')) return;
+  if (bookProject) saveBookToHistory();
+  bookProject = null;
+  tempChapters = [
+    { title: 'Pendahuluan', wt: 5000 },
+    { title: 'Tinjauan Pustaka & Kerangka Teori', wt: 6000 },
+    { title: 'Metodologi Penelitian', wt: 4000 },
+    { title: 'Hasil & Pembahasan', wt: 7000 },
+    { title: 'Kesimpulan & Rekomendasi', wt: 3000 }
+  ];
+  localStorage.removeItem(BOOK_PROJ_KEY);
+  initBookMode();
+}
+
+// ── BOOK WORKSPACE ────────────────────────────────────────────────
+function renderBookWorkspace() {
+  document.getElementById('book-setup').style.display = 'none';
+  document.getElementById('book-workspace').style.display = '';
+
+  // Title display
+  const td = document.getElementById('bookTitleDisplay');
+  if (td) td.textContent = '📖 ' + (bookProject.title || 'Buku');
+
+  renderChapterNav();
+  updateBookProgress();
+}
+
+function renderChapterNav() {
+  const el = document.getElementById('chapterNavList');
+  if (!el || !bookProject) return;
+  el.innerHTML = bookProject.chapters.map((ch, i) => {
+    const icon = ch.status === 'done' ? '✓' : ch.status === 'generating' ? '⟳' :
+                 ch.status === 'error' ? '✗' : (i+1).toString();
+    return `<div class="chapter-item ${ch.status} ${activeChapterIdx===i?'active':''}"
+      onclick="selectChapter(${i})" id="chap-nav-${i}">
+      <span class="ci-num">${icon}</span>
+      <div class="ci-body">
+        <div class="ci-title" title="${escHtml(ch.title)}">Bab ${ch.num}: ${escHtml(ch.title)}</div>
+        <div class="ci-sub">
+          ${ch.wc > 0
+            ? `<span class="ci-wc">${ch.wc.toLocaleString()} kata</span>`
+            : `<span>target: ${(ch.targetWords||5000).toLocaleString()} kata</span>`}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selectChapter(idx) {
+  if (!bookProject || idx < 0 || idx >= bookProject.chapters.length) return;
+  activeChapterIdx = idx;
+  const ch = bookProject.chapters[idx];
+
+  // Update nav highlight
+  document.querySelectorAll('.chapter-item').forEach((el, i) => {
+    el.classList.toggle('active', i === idx);
+  });
+
+  // Update header
+  document.getElementById('bchTitle').textContent = `Bab ${ch.num}: ${ch.title}`;
+  document.getElementById('bchStatus').textContent =
+    { pending:'⏳ Belum digenerate', generating:'⟳ Sedang digenerate',
+      done:'✅ Selesai', error:'❌ Error' }[ch.status] || ch.status;
+  document.getElementById('bchTarget').textContent =
+    `Target: ${(ch.targetWords||5000).toLocaleString()} kata`;
+
+  const regen = document.getElementById('btnRegenChap');
+  if (regen) regen.style.display = ch.status !== 'pending' ? '' : 'none';
+
+  // Load chat history for this chapter
+  bookChatHistory = ch.chatHistory || [];
+  renderBookChat();
+
+  // Switch to write panel
+  switchBookPanel('write');
+
+  // If done, show preview automatically
+  if (ch.content) {
+    const prev = document.getElementById('bookChapterPreview');
+    if (prev) prev.innerHTML = marked.parse(ch.content);
+  }
+}
+
+function updateBookProgress() {
+  if (!bookProject) return;
+  const done  = bookProject.chapters.filter(c => c.status === 'done').length;
+  const total = bookProject.chapters.length;
+  const totalWC = bookProject.chapters.reduce((s, c) => s + (c.wc||0), 0);
+
+  document.getElementById('bookChapDone').textContent = `${done}/${total} bab`;
+  document.getElementById('bookTotalWC').textContent  = totalWC.toLocaleString() + ' kata';
+  document.getElementById('bookProgressFill').style.width = Math.round(done/total*100) + '%';
+
+  const bfwc = document.getElementById('bookFullWC');
+  if (bfwc) bfwc.textContent = totalWC.toLocaleString() + ' kata total';
+}
+
+function switchBookPanel(panel) {
+  ['write','preview','full'].forEach(p => {
+    const el = document.getElementById('bpanel-' + p);
+    const tab = document.getElementById('bpTab-' + p);
+    if (el)  el.style.display  = p === panel ? '' : 'none';
+    if (tab) tab.classList.toggle('active', p === panel);
+  });
+  if (panel === 'full') renderFullBookView();
+}
+
+function renderFullBookView() {
+  if (!bookProject) return;
+  const el = document.getElementById('bookFullView');
+  if (!el) return;
+  const md = `# ${bookProject.title}\n\n` +
+    bookProject.chapters.map(ch =>
+      ch.content
+        ? `## Bab ${ch.num}: ${ch.title}\n\n${ch.content}`
+        : `## Bab ${ch.num}: ${ch.title}\n\n*[Belum digenerate]*`
+    ).join('\n\n---\n\n');
+  el.innerHTML = marked.parse(md);
+}
+
+// ── BOOK CHAT RENDER ──────────────────────────────────────────────
+function renderBookChat() {
+  const el = document.getElementById('bookChatArea');
+  if (!el) return;
+  el.innerHTML = bookChatHistory.map(m => `
+    <div class="chat-msg ${m.role === 'user' ? 'chat-user' : 'chat-ai'}">
+      <div class="chat-role">${m.role === 'user' ? '👤 Instruksi' : '🤖 Scholaris'}</div>
+      <div>${m.role === 'user' ? escHtml(m.content.slice(0,200)) : marked.parse(m.content)}</div>
+    </div>`).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+// ── BOOK CHAPTER GENERATION ───────────────────────────────────────
+async function sendBookChapter() {
+  if (activeChapterIdx < 0 || !bookProject) return toast('Pilih bab dari navigator terlebih dahulu.');
+  const ch    = bookProject.chapters[activeChapterIdx];
+  const input = (document.getElementById('bookInput').value || '').trim();
+  const lang  = document.getElementById('mtLang').value;
+  const model = document.getElementById('mtModel').value;
+  const type  = bookProject.type || 'academic';
+  const maxTok = Math.min(MODEL_TOKENS[model] || 16000, 16000);
+
+  // ── Build CONTINUITY CONTEXT from previous chapters ──────────
+  const prevDone = bookProject.chapters
+    .filter((c, i) => i < activeChapterIdx && c.status === 'done' && c.content);
+  const contCtx = prevDone.length > 0
+    ? '=== KONTEKS DARI BAB SEBELUMNYA (untuk kontinuitas) ===\n' +
+      prevDone.map(c => `## Bab ${c.num}: ${c.title}\n${c.content.slice(0, 1200)}...[ringkasan]`).join('\n\n') +
+      '\n=== AKHIR KONTEKS ==='
+    : '';
+
+  // ── Ref pool if available ──────────────────────────────────
+  const refCtx = validatedRefPool.length > 0
+    ? buildLockedRefContext_(validatedRefPool, 'apa7', lang)
+    : '';
+
+  const langMap = { id:'Bahasa Indonesia', en:'English', ar:'Arabic' };
+  const typeMap = {
+    academic:'buku akademis ilmiah', popular:'buku populer-ilmiah',
+    textbook:'buku teks/ajar', monograph:'monografi', thesis:'tesis/disertasi'
+  };
+
+  const userPrompt = [
+    `JUDUL BUKU: "${bookProject.title}"`,
+    `TIPE: ${typeMap[type] || type}`,
+    `\nBAB ${ch.num} DARI ${bookProject.chapters.length}: "${ch.title}"`,
+    `TARGET: ${(ch.targetWords||5000).toLocaleString()} kata`,
+    contCtx ? `\n${contCtx}` : '',
+    refCtx  ? `\n${refCtx}` : '',
+    input   ? `\nINSTRUKSI KHUSUS BAB INI: ${input}` : '',
+    `\nTUGAS: Tulis Bab ${ch.num} "${ch.title}" secara LENGKAP dan UTUH dalam ${langMap[lang]||'Bahasa Indonesia'}.`,
+    `Gunakan gaya ${typeMap[type]||'akademis'} yang konsisten dengan seluruh buku.`,
+    `Wajib sub-bab bernomor (${ch.num}.1, ${ch.num}.2, dst).`,
+    `Minimum ${(ch.targetWords||5000).toLocaleString()} kata. JANGAN dipotong atau diringkas.`
+  ].filter(Boolean).join('\n');
+
+  const systemPrompt = `Kamu adalah penulis ${typeMap[type]||'buku akademis'} senior yang sedang menulis buku "${bookProject.title}". Setiap bab harus mengalir kohesif dari bab sebelumnya. Tulis dengan gaya yang konsisten, argumen yang dalam, dan referensi yang kuat.`;
+
+  // Update state
+  ch.status = 'generating';
+  bookChatHistory.push({ role: 'user', content: `[Generate Bab ${ch.num}: ${ch.title}]${input?' — '+input:''}` });
+  renderChapterNav();
+  renderBookChat();
+  document.getElementById('bookInput').value = '';
+  setLoading(true);
+
+  try {
+    const result = await callGASWithRetry({
+      action    : 'ai_write',
+      model     : model,
+      system    : systemPrompt,
+      messages  : [...bookChatHistory.filter(m => m.role !== 'user' || !m.content.startsWith('[Generate')),
+                   { role: 'user', content: userPrompt }],
+      temperature: 0.45,
+      max_tokens : maxTok
+    }, 320000, MODEL_FALLBACK[model] || model);
+
+    if (!result || !result.success) throw new Error(result?.error || 'Generate bab gagal');
+
+    ch.content    = result.content;
+    ch.wc         = countWords(result.content);
+    ch.status     = 'done';
+    ch.chatHistory= bookChatHistory;
+
+    bookChatHistory.push({ role: 'assistant', content: result.content });
+
+    // Update preview
+    const prev = document.getElementById('bookChapterPreview');
+    if (prev) prev.innerHTML = marked.parse(result.content);
+
+    renderChapterNav();
+    renderBookChat();
+    updateBookProgress();
+    saveBookProjectLocal();
+    triggerAutosave('Bab tersimpan otomatis');
+
+    // Update header status
+    document.getElementById('bchStatus').textContent = '✅ Selesai';
+    document.getElementById('btnRegenChap').style.display = '';
+
+    // Auto-advance to next chapter hint
+    const nextIdx = activeChapterIdx + 1;
+    if (nextIdx < bookProject.chapters.length) {
+      toast(`✅ Bab ${ch.num} selesai (${ch.wc.toLocaleString()} kata). Klik Bab ${nextIdx+1} untuk lanjut.`, 5000);
+    } else {
+      toast(`🎉 Semua ${bookProject.chapters.length} bab selesai! Total: ${bookProject.chapters.reduce((s,c)=>s+(c.wc||0),0).toLocaleString()} kata.`, 6000);
+    }
+
+  } catch(e) {
+    ch.status = 'error';
+    renderChapterNav();
+    toast('❌ Bab ' + ch.num + ' gagal: ' + e.message, 7000);
+  }
+  setLoading(false);
+}
+
+async function regenCurrentChapter() {
+  if (activeChapterIdx < 0 || !bookProject) return;
+  bookProject.chapters[activeChapterIdx].status  = 'pending';
+  bookProject.chapters[activeChapterIdx].content = '';
+  bookProject.chapters[activeChapterIdx].wc      = 0;
+  bookChatHistory = [];
+  renderChapterNav();
+  renderBookChat();
+  await sendBookChapter();
+}
+
+// Generate ALL chapters sequentially (batch mode)
+async function generateAllChapters() {
+  if (!bookProject) return;
+  const pending = bookProject.chapters.filter(c => c.status === 'pending');
+  if (pending.length === 0) return toast('Semua bab sudah digenerate.');
+  if (!confirm(`Generate ${pending.length} bab yang belum selesai secara berurutan?\nEstimasi: ${pending.length * 8}–${pending.length * 15} menit.`)) return;
+
+  for (let i = 0; i < bookProject.chapters.length; i++) {
+    const ch = bookProject.chapters[i];
+    if (ch.status === 'done') continue;
+    selectChapter(i);
+    await sendBookChapter();
+    if (ch.status === 'error') {
+      const cont = confirm(`Bab ${ch.num} gagal. Lanjut ke bab berikutnya?`);
+      if (!cont) break;
+    }
+    // Brief pause between chapters
+    await new Promise(r => setTimeout(r, 1500));
+  }
+}
+
+// ── BOOK EXPORT ───────────────────────────────────────────────────
+async function bookExportAll() {
+  if (!bookProject) return toast('Tidak ada proyek buku.');
+  const hasDone = bookProject.chapters.some(c => c.status === 'done');
+  if (!hasDone) return toast('Belum ada bab yang digenerate.');
+
+  const fullText = `# ${bookProject.title}\n\n` +
+    bookProject.chapters.map(ch =>
+      ch.content ? `## Bab ${ch.num}: ${ch.title}\n\n${ch.content}` : ''
+    ).filter(Boolean).join('\n\n---\n\n');
+
+  // Temporarily set lastOutput for exportDOCX
+  const origOutput = lastOutput;
+  const origTitleEl = document.getElementById('writeTitle');
+  const origTitle = origTitleEl ? origTitleEl.value : '';
+
+  lastOutput = fullText;
+  if (origTitleEl) origTitleEl.value = bookProject.title;
+  await exportDOCX();
+  lastOutput = origOutput;
+  if (origTitleEl) origTitleEl.value = origTitle;
+}
+
+function bookExportPDF() {
+  if (!bookProject) return;
+  const fullText = `# ${bookProject.title}\n\n` +
+    bookProject.chapters.map(ch =>
+      ch.content ? `## Bab ${ch.num}: ${ch.title}\n\n${ch.content}` : ''
+    ).filter(Boolean).join('\n\n---\n\n');
+  const orig = lastOutput;
+  lastOutput = fullText;
+  exportPDF();
+  lastOutput = orig;
+}
+
+function saveBookToHistory() {
+  if (!bookProject) return;
+  const fullText = bookProject.chapters.map(c => c.content).filter(Boolean).join('\n\n');
+  if (!fullText) return toast('Belum ada konten untuk disimpan.');
+  const orig = lastOutput;
+  const origTitleEl = document.getElementById('writeTitle');
+  const origTitle = origTitleEl ? origTitleEl.value : '';
+  const origModeEl = document.getElementById('writeMode');
+  const origMode = origModeEl ? origModeEl.value : '';
+
+  lastOutput = fullText;
+  if (origTitleEl) origTitleEl.value = bookProject.title;
+  if (origModeEl)  origModeEl.value  = 'book_chapter';
+  saveToHistory('book');
+  lastOutput = orig;
+  if (origTitleEl) origTitleEl.value = origTitle;
+  if (origModeEl)  origModeEl.value  = origMode;
+}
+
+// ── SAVE MT CHAT TO HISTORY ───────────────────────────────────────
+function saveMtToHistory() {
+  const text = chatMessages.filter(m => m.role === 'assistant').map(m => m.content).join('\n\n');
+  if (!text || text.trim().length < 100) return toast('Tidak ada konten untuk disimpan.');
+  const orig = lastOutput;
+  lastOutput = text;
+  saveToHistory('multiwriter');
+  lastOutput = orig;
+  toast('💾 Sesi Multi-Turn disimpan ke Riwayat!', 3000);
+}
+
+// Update MT word count
+function updateMtWordCount() {
+  const text = chatMessages.filter(m => m.role === 'assistant').map(m => m.content).join('\n\n');
+  const el   = document.getElementById('mtWordCount');
+  if (el) el.textContent = countWords(text).toLocaleString() + ' kata';
+}
+
+// ================================================================
+// TEMPLATE LIBRARY — 20+ BIDANG ILMU
+// ================================================================
+
+const TEMPLATE_CATS = [
+  { id:'all',     label:'🌐 Semua Template',    icon:'🌐' },
+  { id:'islam',   label:'☪️ Studi Islam',        icon:'☪️' },
+  { id:'ekon',    label:'💰 Ekonomi & Bisnis',   icon:'💰' },
+  { id:'hukum',   label:'⚖️ Hukum & HAM',        icon:'⚖️' },
+  { id:'sains',   label:'🔬 Sains & Teknologi',  icon:'🔬' },
+  { id:'kes',     label:'🏥 Kesehatan',          icon:'🏥' },
+  { id:'pend',    label:'📚 Pendidikan',         icon:'📚' },
+  { id:'sos',     label:'👥 Sosial & Politik',   icon:'👥' },
+  { id:'ling',    label:'🌿 Lingkungan',         icon:'🌿' },
+  { id:'book',    label:'📖 Template Buku',      icon:'📖' },
+];
+
+const TEMPLATES = [
+  // ── STUDI ISLAM ─────────────────────────────────────────────
+  { id:'t01', cat:'islam', icon:'🕌', title:'Tafsir Tematik Kontemporer',
+    desc:'Artikel jurnal analisis tafsir tematik dengan pendekatan hermeneutika modern.',
+    mode:'article_full', lang:'id', cite:'chicago',
+    title_tpl:'[TOPIK AYAT] dalam al-Quran: Analisis Tafsir Tematik Kontemporer',
+    instructions:'Gunakan metodologi tafsir maudhui. Sertakan analisis bahasa Arab, asbab al-nuzul, dan relevansi kontemporer. Target Scopus Q2 bidang Islamic Studies.',
+    tags:['Tafsir','al-Quran','Hermeneutika'],
+    bookChapters: null
+  },
+  { id:'t02', cat:'islam', icon:'🌙', title:'Ekonomi Syariah Digital',
+    desc:'Penelitian integrasi fintech dengan prinsip maqashid syariah.',
+    mode:'article_full', lang:'id', cite:'apa7',
+    title_tpl:'Integrasi Fintech dalam Ekosistem Zakat Digital: Perspektif Maqashid Syariah',
+    instructions:'Analisis menggunakan framework maqashid syariah Auda (2008). Sertakan data empiris dari BAZNAS/LAZ Indonesia. Target jurnal Scopus Q1/Q2 bidang Islamic Finance.',
+    tags:['Fintech','Zakat','Maqashid'],
+    bookChapters: null
+  },
+  { id:'t03', cat:'islam', icon:'📿', title:'Hadis dan Metode Kritik Sanad',
+    desc:'Kajian ulumul hadis dengan fokus metodologi kritik sanad dan matan.',
+    mode:'article_full', lang:'id', cite:'chicago',
+    title_tpl:'Rekonstruksi Metodologi Kritik Hadis: Analisis Sanad dan Matan dalam Konteks Kontemporer',
+    instructions:'Gunakan metodologi ulumul hadis klasik (Ibnu Hajar, Ibnu Salah) dan kritik hadis kontemporer (Schacht, Juynboll). Bahasa akademis Islam.',
+    tags:['Hadis','Sanad','Ulumul Hadis'],
+    bookChapters: null
+  },
+  { id:'t04', cat:'islam', icon:'⚖️', title:'Fiqih Kontemporer & Fatwa',
+    desc:'Analisis isu-isu fiqih kontemporer dengan metode istinbath hukum.',
+    mode:'article_full', lang:'id', cite:'chicago',
+    title_tpl:'[ISU KONTEMPORER] dalam Perspektif Fiqih: Studi Komparatif Mazhab dan Fatwa MUI',
+    instructions:'Gunakan metode muqaranah al-mazahib (perbandingan mazhab). Sertakan fatwa MUI, OKI, dan lembaga fatwa internasional. Target jurnal Al-Ahkam, Asy-Syirah.',
+    tags:['Fiqih','Fatwa','Mazhab'],
+    bookChapters: null
+  },
+  // ── EKONOMI & BISNIS ─────────────────────────────────────────
+  { id:'t05', cat:'ekon', icon:'📊', title:'Analisis Keuangan Perusahaan',
+    desc:'Artikel analisis kinerja keuangan dengan rasio dan model prediksi.',
+    mode:'article_full', lang:'id', cite:'apa7',
+    title_tpl:'Analisis Kinerja Keuangan [PERUSAHAAN/SEKTOR]: Pendekatan DuPont Analysis dan Model Altman Z-Score',
+    instructions:'Gunakan metode kuantitatif: analisis rasio keuangan, DuPont, Altman Z-Score. Data dari laporan keuangan BEI. Target jurnal JIAFE, JAI, atau internasional.',
+    tags:['Keuangan','Laporan','BEI'],
+    bookChapters: null
+  },
+  { id:'t06', cat:'ekon', icon:'🏢', title:'UMKM & Kewirausahaan Digital',
+    desc:'Penelitian pengaruh digitalisasi terhadap kinerja UMKM.',
+    mode:'article_full', lang:'id', cite:'apa7',
+    title_tpl:'Pengaruh Digitalisasi terhadap Kinerja UMKM: Mediasi Literasi Digital dan Akses Pembiayaan',
+    instructions:'Gunakan metode SEM-PLS (SmartPLS). Variabel: digitalisasi, literasi digital, akses modal, kinerja UMKM. Data primer dari survei 200+ UMKM. Target jurnal Scopus.',
+    tags:['UMKM','Digital','SEM-PLS'],
+    bookChapters: null
+  },
+  // ── HUKUM ────────────────────────────────────────────────────
+  { id:'t07', cat:'hukum', icon:'🏛️', title:'Hukum Pidana & Pembaharuan',
+    desc:'Analisis yuridis kebijakan pemidanaan dalam konteks KUHP baru.',
+    mode:'article_full', lang:'id', cite:'chicago',
+    title_tpl:'Pembaharuan Hukum Pidana dalam KUHP Nasional 2023: Analisis Kritis terhadap [PASAL/ISU]',
+    instructions:'Gunakan metode penelitian hukum normatif. Analisis pasal per pasal, perbandingan dengan KUHP lama, dan dampak implementasi. Sertakan putusan MA relevan.',
+    tags:['KUHP','Pidana','Normatif'],
+    bookChapters: null
+  },
+  { id:'t08', cat:'hukum', icon:'🌍', title:'HAM & Hukum Internasional',
+    desc:'Penelitian instrumen HAM internasional dalam konteks Indonesia.',
+    mode:'article_full', lang:'en', cite:'chicago',
+    title_tpl:'Indonesia\'s Implementation of [INTERNATIONAL INSTRUMENT]: A Critical Legal Analysis',
+    instructions:'Use international law methodology. Cite UN treaty bodies, ICJ decisions, and Indonesian constitutional court rulings. Target international human rights law journals.',
+    tags:['HAM','UN','Internasional'],
+    bookChapters: null
+  },
+  // ── SAINS & TEKNOLOGI ─────────────────────────────────────────
+  { id:'t09', cat:'sains', icon:'🤖', title:'Kecerdasan Buatan & Machine Learning',
+    desc:'Artikel teknis implementasi ML untuk pemecahan masalah spesifik.',
+    mode:'article_full', lang:'en', cite:'ieee',
+    title_tpl:'[ML MODEL/ALGORITHM] for [APPLICATION DOMAIN]: A Comparative Study with Benchmark Datasets',
+    instructions:'Use standard ML paper structure: problem formulation, proposed model, experimental setup, results with statistical significance, comparison with SOTA. Target Scopus Q1 CS journals.',
+    tags:['AI/ML','Deep Learning','IEEE'],
+    bookChapters: null
+  },
+  { id:'t10', cat:'sains', icon:'💊', title:'Bioteknologi & Farmasi',
+    desc:'Penelitian uji aktivitas senyawa bioaktif dari bahan alam.',
+    mode:'article_full', lang:'en', cite:'apa7',
+    title_tpl:'Bioactive Compounds from [PLANT/SOURCE]: Isolation, Characterization, and [ACTIVITY] Assessment',
+    instructions:'Include phytochemical screening, isolation methods (TLC, column chromatography), characterization (NMR, MS), and bioactivity assays. Target Scopus Q1/Q2 pharmacognosy journals.',
+    tags:['Bioaktif','Fitokimia','Farmasi'],
+    bookChapters: null
+  },
+  // ── KESEHATAN ─────────────────────────────────────────────────
+  { id:'t11', cat:'kes', icon:'🏥', title:'Epidemiologi & Kesehatan Masyarakat',
+    desc:'Penelitian faktor risiko dan determinan kesehatan populasi.',
+    mode:'article_full', lang:'id', cite:'apa7',
+    title_tpl:'Faktor Risiko [PENYAKIT] pada [POPULASI]: Studi Cross-Sectional di [LOKASI]',
+    instructions:'Desain cross-sectional atau kohort. Analisis multivariat logistic regression. Laporan sesuai STROBE checklist. Target jurnal kesehatan SINTA 1/2 atau Scopus.',
+    tags:['Epidemiologi','Cross-sectional','Kesmas'],
+    bookChapters: null
+  },
+  { id:'t12', cat:'kes', icon:'🧠', title:'Psikologi Klinis & Kesehatan Mental',
+    desc:'Penelitian intervensi psikologis berbasis evidence-based practice.',
+    mode:'article_full', lang:'id', cite:'apa7',
+    title_tpl:'Efektivitas [INTERVENSI] terhadap [KONDISI] pada [POPULASI]: RCT dengan Follow-up [DURASI]',
+    instructions:'RCT atau quasi-experiment design. CONSORT checklist. Analisis intention-to-treat dan per-protocol. Sertakan effect size Cohen\'s d. Target klinis dan psikologi.',
+    tags:['Psikologi','RCT','CBT'],
+    bookChapters: null
+  },
+  // ── PENDIDIKAN ────────────────────────────────────────────────
+  { id:'t13', cat:'pend', icon:'📚', title:'Inovasi Pembelajaran & Kurikulum',
+    desc:'Penelitian pengembangan model pembelajaran inovatif.',
+    mode:'article_full', lang:'id', cite:'apa7',
+    title_tpl:'Pengembangan Model Pembelajaran [MODEL] Berbasis [TEKNOLOGI/PENDEKATAN]: Studi Quasi-Experimental',
+    instructions:'Gunakan desain R&D (Borg & Gall atau ADDIE) atau quasi-experiment. Sertakan instrumen validasi ahli, uji keterbacaan, dan pre-post test. Target jurnal pendidikan Scopus.',
+    tags:['Kurikulum','R&D','Pembelajaran'],
+    bookChapters: null
+  },
+  { id:'t14', cat:'pend', icon:'🎓', title:'Pendidikan Tinggi & Kebijakan Kampus',
+    desc:'Analisis kebijakan pendidikan tinggi dan dampaknya.',
+    mode:'article_full', lang:'id', cite:'apa7',
+    title_tpl:'Implementasi [KEBIJAKAN] di Perguruan Tinggi Indonesia: Analisis Dampak dan Rekomendasi Kebijakan',
+    instructions:'Gunakan pendekatan policy analysis (Dunn model atau Patton & Sawicki). Mixed methods: survei dan wawancara mendalam. Data dari Dikti/PDDikti.',
+    tags:['Dikti','Kebijakan','Mixed Methods'],
+    bookChapters: null
+  },
+  // ── SOSIAL & POLITIK ──────────────────────────────────────────
+  { id:'t15', cat:'sos', icon:'🗳️', title:'Politik & Demokrasi Indonesia',
+    desc:'Analisis politik elektoral dan dinamika demokrasi.',
+    mode:'article_full', lang:'id', cite:'chicago',
+    title_tpl:'Dinamika [FENOMENA POLITIK] dalam Demokrasi Indonesia Pasca-Reformasi: Analisis Empiris',
+    instructions:'Gunakan teori demokratisasi (Dahl, Linz & Stepan) dan data empiris (Pilkada/Pileg). Analisis konten media atau survei opini publik. Target jurnal politik bereputasi.',
+    tags:['Demokrasi','Elektoral','Politik'],
+    bookChapters: null
+  },
+  { id:'t16', cat:'sos', icon:'🌏', title:'Sosiologi & Perubahan Sosial',
+    desc:'Penelitian fenomena sosial dengan pendekatan kualitatif.',
+    mode:'article_full', lang:'id', cite:'chicago',
+    title_tpl:'[FENOMENA SOSIAL] di [KONTEKS/LOKASI]: Analisis Sosiologis dengan Pendekatan Fenomenologi',
+    instructions:'Gunakan metodologi fenomenologi Husserl atau Schutz. Data: wawancara mendalam 15-20 informan, observasi partisipan. Analisis tematik dengan Atlas.ti.',
+    tags:['Sosiologi','Fenomenologi','Kualitatif'],
+    bookChapters: null
+  },
+  // ── LINGKUNGAN ────────────────────────────────────────────────
+  { id:'t17', cat:'ling', icon:'🌿', title:'Ekologi & Konservasi',
+    desc:'Penelitian keanekaragaman hayati dan upaya konservasi.',
+    mode:'article_full', lang:'en', cite:'apa7',
+    title_tpl:'Biodiversity Assessment and Conservation Status of [SPECIES/ECOSYSTEM] in [LOCATION]',
+    instructions:'Use systematic biodiversity survey methods. Calculate diversity indices (Shannon, Simpson). IUCN Red List assessment. Target Scopus Q1/Q2 ecology journals.',
+    tags:['Biodiversitas','Konservasi','Ekologi'],
+    bookChapters: null
+  },
+  { id:'t18', cat:'ling', icon:'♻️', title:'Perubahan Iklim & Energi Terbarukan',
+    desc:'Analisis dampak iklim dan solusi energi berkelanjutan.',
+    mode:'article_full', lang:'en', cite:'apa7',
+    title_tpl:'[RENEWABLE ENERGY TECHNOLOGY] Potential Assessment in [REGION]: Technical-Economic-Environmental Analysis',
+    instructions:'Techno-economic analysis. Life cycle assessment (LCA). CO2 emission reduction quantification. GIS-based resource mapping. Target energy and environment Scopus journals.',
+    tags:['Energi Terbarukan','LCA','Iklim'],
+    bookChapters: null
+  },
+  // ── BOOK TEMPLATES ─────────────────────────────────────────────
+  { id:'b01', cat:'book', icon:'📖', title:'Buku Ajar Ekonomi Islam',
+    desc:'Buku teks 12 bab untuk mata kuliah Ekonomi Islam S1.',
+    mode:'book_chapter', lang:'id', cite:'apa7',
+    title_tpl:'Ekonomi Islam: Teori, Prinsip, dan Implementasi Kontemporer',
+    instructions:'Buku ajar perguruan tinggi Islam. Setiap bab: tujuan pembelajaran, isi substantif, contoh kasus Indonesia, rangkuman, dan soal latihan.',
+    tags:['Buku Ajar','Ekonomi Islam','S1'],
+    bookChapters:[
+      'Sejarah dan Perkembangan Ekonomi Islam',
+      'Prinsip-Prinsip Dasar Ekonomi Islam',
+      'Sistem Moneter dan Perbankan Syariah',
+      'Instrumen Keuangan Islam: Zakat, Infak, Sedekah, Wakaf',
+      'Pasar Modal Syariah',
+      'Usaha Mikro, Kecil, dan Menengah Berbasis Syariah',
+      'Perdagangan Internasional Perspektif Islam',
+      'Pembangunan Ekonomi dan Distribusi Kekayaan',
+      'Digitalisasi dan Fintech Syariah',
+      'Ekonomi Islam dan SDGs',
+      'Studi Kasus: Model Ekonomi Islam di Berbagai Negara',
+      'Masa Depan Ekonomi Islam Global'
+    ]
+  },
+  { id:'b02', cat:'book', icon:'📗', title:'Monografi Riset Kualitatif',
+    desc:'Monografi hasil penelitian kualitatif mendalam — 10 bab.',
+    mode:'book_chapter', lang:'id', cite:'apa7',
+    title_tpl:'[TOPIK PENELITIAN]: Temuan, Analisis, dan Implikasi Teoritis',
+    instructions:'Monografi penelitian kualitatif. Gaya naratif analitis. Setiap bab menjelaskan satu dimensi temuan secara mendalam dengan kutipan verbatim informan.',
+    tags:['Monografi','Kualitatif','Penelitian'],
+    bookChapters:[
+      'Pendahuluan: Konteks dan Signifikansi',
+      'Kajian Pustaka: Peta Perdebatan Teoritis',
+      'Metodologi: Pendekatan Fenomenologis',
+      'Temuan I: [Dimensi Pertama]',
+      'Temuan II: [Dimensi Kedua]',
+      'Temuan III: [Dimensi Ketiga]',
+      'Analisis Tematik: Sintesis Lintas Tema',
+      'Diskusi: Dialog dengan Teori Existing',
+      'Implikasi Teoritis dan Praktis',
+      'Penutup: Kontribusi dan Agenda Riset'
+    ]
+  },
+  { id:'b03', cat:'book', icon:'📕', title:'Tesis/Disertasi Lengkap',
+    desc:'Struktur tesis/disertasi 5 bab standar PTN Indonesia.',
+    mode:'thesis_chapter', lang:'id', cite:'apa7',
+    title_tpl:'[JUDUL TESIS/DISERTASI]',
+    instructions:'Penulisan tesis/disertasi standar pascasarjana Indonesia. Setiap bab sesuai pedoman penulisan tesis PTKIN. Gaya akademis formal.',
+    tags:['Tesis','Disertasi','S2/S3'],
+    bookChapters:[
+      'Pendahuluan: Latar Belakang, Rumusan, Tujuan, dan Manfaat',
+      'Tinjauan Pustaka dan Kerangka Teori',
+      'Metodologi Penelitian',
+      'Hasil Penelitian dan Pembahasan',
+      'Penutup: Simpulan, Implikasi, dan Saran'
+    ]
+  },
+  { id:'b04', cat:'book', icon:'📙', title:'Buku Populer Ilmiah',
+    desc:'Buku populer-ilmiah untuk pembaca umum, gaya naratif engaging.',
+    mode:'book_chapter', lang:'id', cite:'apa7',
+    title_tpl:'[TOPIK]: Membedah [ISU] dari Sudut Pandang Ilmiah',
+    instructions:'Buku populer ilmiah ala Yuval Noah Harari / Malcolm Gladwell. Gaya naratif, storytelling, analogi menarik. Bahasa mudah namun substansi ilmiah solid. Setiap bab dimulai dengan cerita/kasus nyata.',
+    tags:['Populer Ilmiah','Narasi','Umum'],
+    bookChapters:[
+      'Prolog: Mengapa Pertanyaan Ini Penting?',
+      'Asal Muasal: Memahami Sejarah [Topik]',
+      'Anatomi [Fenomena]: Bagaimana Cara Kerjanya',
+      'Mitos vs Fakta: Membongkar Salah Paham',
+      'Kasus Dunia: Pelajaran dari Berbagai Belahan Dunia',
+      'Konteks Indonesia: Tantangan dan Peluang Unik',
+      'Solusi yang Bekerja: Bukti dari Riset',
+      'Masa Depan: Apa yang Mungkin Terjadi',
+      'Panduan Praktis: Apa yang Bisa Kamu Lakukan',
+      'Epilog: Menutup dengan Visi'
+    ]
+  },
+  { id:'b05', cat:'book', icon:'📒', title:'Policy Brief & Laporan Kebijakan',
+    desc:'Dokumen kebijakan untuk pembuat kebijakan, ringkas dan berbasis data.',
+    mode:'policy_brief', lang:'id', cite:'apa7',
+    title_tpl:'Policy Brief: [ISU KEBIJAKAN] — Rekomendasi Berbasis Bukti untuk [LEMBAGA]',
+    instructions:'Policy brief standar internasional (ODI format). Bahasa ringkas, bullet point, rekomendasi spesifik dan actionable. Sertakan data terkini dan best practices internasional.',
+    tags:['Policy Brief','Kebijakan','Rekomendasi'],
+    bookChapters: null
+  },
+];
+
+function openTemplateLibrary(forceCat = null) {
+  renderTLCats(forceCat || 'all');
+  renderTLGrid('all', '');
+  document.getElementById('tlOverlay').classList.add('active');
+  document.getElementById('tlSearch').value = '';
+}
+
+function closeTL() {
+  document.getElementById('tlOverlay').classList.remove('active');
+}
+
+function renderTLCats(activeCat) {
+  const el = document.getElementById('tlCats');
+  el.innerHTML = TEMPLATE_CATS.map(c => `
+    <div class="tl-cat-item ${c.id===activeCat?'active':''}"
+      onclick="renderTLGrid('${c.id}','');document.querySelectorAll('.tl-cat-item').forEach(e=>e.classList.remove('active'));this.classList.add('active');">
+      ${c.icon} ${c.label}
+    </div>`).join('');
+}
+
+function renderTLGrid(cat, query) {
+  const el = document.getElementById('tlGrid');
+  let tpls = TEMPLATES;
+  if (cat && cat !== 'all') tpls = tpls.filter(t => t.cat === cat);
+  if (query) {
+    const q = query.toLowerCase();
+    tpls = tpls.filter(t =>
+      t.title.toLowerCase().includes(q) ||
+      t.desc.toLowerCase().includes(q) ||
+      t.tags.some(tag => tag.toLowerCase().includes(q))
+    );
+  }
+  if (tpls.length === 0) {
+    el.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--text3);padding:40px;">Tidak ada template ditemukan.</div>';
+    return;
+  }
+  el.innerHTML = tpls.map(t => `
+    <div class="tl-card">
+      <div class="tl-card-icon">${t.icon}</div>
+      <div class="tl-card-title">${escHtml(t.title)}</div>
+      <div class="tl-card-desc">${escHtml(t.desc)}</div>
+      <div class="tl-card-tags">${t.tags.map(tag=>`<span class="tl-tag">${escHtml(tag)}</span>`).join('')}</div>
+      <button class="tl-card-use" onclick="applyTemplate('${t.id}')">✓ Gunakan Template ini</button>
+    </div>`).join('');
+}
+
+function filterTemplates(q) {
+  const activeCat = document.querySelector('.tl-cat-item.active');
+  const cat = activeCat ? activeCat.getAttribute('onclick').match(/'([^']+)'/)?.[1] || 'all' : 'all';
+  renderTLGrid(cat, q);
+}
+
+function applyTemplate(id) {
+  const tpl = TEMPLATES.find(t => t.id === id);
+  if (!tpl) return;
+
+  // Apply to AI Writer
+  const titleEl  = document.getElementById('writeTitle');
+  const modeEl   = document.getElementById('writeMode');
+  const langEl   = document.getElementById('writeLang');
+  const citeEl   = document.getElementById('citeStyle');
+  const instrEl  = document.getElementById('writeInstructions');
+
+  if (titleEl)  titleEl.value  = tpl.title_tpl || '';
+  if (modeEl)   modeEl.value   = tpl.mode || 'article_full';
+  if (langEl)   langEl.value   = tpl.lang || 'id';
+  if (citeEl)   citeEl.value   = tpl.cite || 'apa7';
+  if (instrEl)  instrEl.value  = tpl.instructions || '';
+
+  // If book template with chapters, set up book mode
+  if (tpl.bookChapters) {
+    tempChapters = tpl.bookChapters.map((title, i) => ({
+      title, wt: tpl.id === 'b03' ? 8000 : 5000
+    }));
+    const bookTitleEl = document.getElementById('bookTitle');
+    const bookTypeEl  = document.getElementById('bookType');
+    if (bookTitleEl) bookTitleEl.value = tpl.title_tpl;
+    if (bookTypeEl) {
+      if (tpl.id === 'b01' || tpl.id === 'b04') bookTypeEl.value = tpl.id === 'b04' ? 'popular' : 'textbook';
+      else if (tpl.id === 'b02') bookTypeEl.value = 'monograph';
+      else if (tpl.id === 'b03') bookTypeEl.value = 'thesis';
+    }
+    renderChapterEditor();
+    // Switch to book mode
+    switchMtMode('book');
+    const writerNav = document.querySelector('[data-page="multiwriter"]');
+    navTo('multiwriter', writerNav);
+    toast(`📖 Template "${tpl.title}" diterapkan ke Book Mode!`, 4000);
+  } else {
+    // Navigate to writer
+    const writerNav = document.querySelector('[data-page="writer"]');
+    navTo('writer', writerNav);
+    if (typeof onModeChange === 'function') onModeChange();
+    toast(`✅ Template "${tpl.title}" diterapkan ke AI Writer!`, 4000);
+  }
+
+  closeTL();
+}
+
+// ── HOOK: Auto-save on key UI interactions ────────────────────────
+// Patch sendMultiTurn to trigger autosave
+const _origSendMT = window.sendMultiTurn;
+if (typeof _origSendMT === 'function') {
+  window.sendMultiTurn = async function() {
+    await _origSendMT.apply(this, arguments);
+    updateMtWordCount();
+    triggerAutosave('Percakapan tersimpan otomatis');
+  };
+}
+
+// Hook textarea changes for autosave signal
+document.addEventListener('DOMContentLoaded', function() {
+  renderTLCats('all');
+  loadBookProjectLocal();
+
+  // Keyboard shortcut: Ctrl+S to save
+  document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      if (mtMode === 'book' && bookProject) {
+        saveBookProjectLocal();
+        showAutosaveToast_('💾 Proyek buku tersimpan (Ctrl+S)');
+      } else if (lastOutput && lastOutput.trim().length > 100) {
+        saveToHistory();
+      }
+    }
+  });
+});
+
+
 function countWords(str) { return str.trim().split(/\s+/).filter(Boolean).length; }
 function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function stripHtml(s) { return s.replace(/<[^>]*>/g, ''); }
@@ -6531,5 +8187,28 @@ function jcStartOver() {
   jcGoStep(0); toast('Siap untuk konversi baru');
 }
 </script>
+<!-- Auto-save Indicator -->
+<div class="autosave-indicator" id="autosaveIndicator">
+  <span class="as-dot"></span>
+  <span id="autosaveMsg">Tersimpan otomatis</span>
+</div>
+
+<!-- Template Library Modal -->
+<div class="template-library-overlay" id="tlOverlay">
+  <div class="tl-modal">
+    <div class="tl-header">
+      <span class="tl-title">📚 Template Library — 20+ Bidang Ilmu</span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="text" class="tl-search" id="tlSearch" placeholder="Cari template..." oninput="filterTemplates(this.value)">
+        <button class="btn btn-sm btn-secondary" onclick="closeTL()">✕</button>
+      </div>
+    </div>
+    <div class="tl-body">
+      <div class="tl-cats" id="tlCats"></div>
+      <div class="tl-grid" id="tlGrid"></div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
