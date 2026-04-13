@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SCHOLARIS AI Academic Writer Engine Pro</title>
+<title>SCHOLARIS v8 — AI Academic Writer Engine + Anti-Halusinasi</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Source+Sans+3:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
@@ -1593,6 +1593,30 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
 }
 /* ============================================================ */
 
+
+/* ── Topbar Login Button (muncul saat tidak login) ── */
+#topbarLoginBtn {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  background: linear-gradient(135deg,#8b4513,#a0522d);
+  border: none;
+  border-radius: 6px;
+  color: #f5deb3;
+  font-family: var(--font-body);
+  font-size: .82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .2s;
+  white-space: nowrap;
+  letter-spacing: .3px;
+}
+#topbarLoginBtn:hover {
+  background: linear-gradient(135deg,#9b5523,#b0623d);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(139,69,19,.3);
+}
 </style>
 </head>
 <body>
@@ -1608,6 +1632,10 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
     </div>
     <nav class="sidebar-nav">
       <div class="nav-section">Workspace</div>
+      <div class="nav-item" id="navBeranda" data-page="landing" onclick="navTo('landing',this)" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        Beranda
+      </div>
       <div class="nav-item active" data-page="writer" onclick="navTo('writer',this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4Z"/></svg>
         AI Writer
@@ -1657,9 +1685,24 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
       </div>
       <button class="member-logout" onclick="doLogout()">⏻ Keluar / Logout</button>
     </div>
+    <!-- Login button di sidebar untuk pengguna tidak login -->
+    <div id="sidebarLoginSection" style="padding:10px 14px;border-top:1px solid rgba(255,255,255,.06);display:none;">
+      <button onclick="showAuthModal('register')"
+        style="width:100%;padding:9px;background:linear-gradient(135deg,#8b4513,#a0522d);
+               border:none;border-radius:6px;color:#f5deb3;font-family:var(--font-body);
+               font-size:.8rem;font-weight:700;cursor:pointer;margin-bottom:6px;transition:all .2s;">
+        🚀 Daftar Anggota
+      </button>
+      <button onclick="showAuthModal('login')"
+        style="width:100%;padding:8px;background:transparent;border:1px solid rgba(245,222,179,.2);
+               border-radius:6px;color:#b0a99f;font-family:var(--font-body);
+               font-size:.78rem;cursor:pointer;transition:all .2s;">
+        🔑 Sudah Anggota? Login
+      </button>
+    </div>
     <div class="sidebar-footer">
       <div>Scholaris Engine</div>
-      <div class="version-badge" id="versionBadge" onclick="handleVersionClick()" style="cursor:pointer;" title="v9.1">v10.1 — Smart and Integrity</div>
+      <div class="version-badge" id="versionBadge" onclick="handleVersionClick()" style="cursor:pointer;" title="v9.1">v10.1 Smart and Integrity</div>
     </div>
   </aside>
 
@@ -1671,6 +1714,9 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
         <span class="topbar-title" id="topbarTitle">AI Writer</span>
       </div>
       <div class="topbar-actions">
+        <button id="topbarLoginBtn" onclick="showAuthModal('login')">
+          🔑 Login / Daftar
+        </button>
         <span class="badge badge-green" id="statusBadge">Ready</span>
         <span id="connectionBadge" class="badge badge-blue" style="display:none;">Menghubungkan...</span>
       </div>
@@ -1887,7 +1933,8 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
                 <option value="chicago">Chicago 17th</option>
                 <option value="harvard">Harvard</option>
                 <option value="ieee">IEEE</option>
-                <option value="turabian">Turabian</option>
+                <option value="turabian">Turabian 9th</option>
+                <option value="isnad">ISNAD — Ilmu Hadits & Kajian Islam</option>
               </select>
             </div>
             <div>
@@ -2389,8 +2436,10 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
               <div class="rf-source-summary" id="rfSourceSummary"></div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button class="btn btn-sm btn-secondary" onclick="copyAllSearchRefs()">📋 Salin APA7</button>
+              <button class="btn btn-sm btn-secondary" onclick="copyAllSearchRefs('apa7')">📋 APA7</button>
               <button class="btn btn-sm btn-secondary" onclick="copyAllSearchRefs('chicago')">📋 Chicago</button>
+              <button class="btn btn-sm btn-secondary" onclick="copyAllSearchRefs('turabian')">📋 Turabian</button>
+              <button class="btn btn-sm btn-secondary" onclick="copyAllSearchRefs('isnad')">📋 ISNAD</button>
               <button class="btn btn-sm btn-secondary" onclick="addAllToBiblio()">➕ Ke Bibliografi</button>
             </div>
           </div>
@@ -2513,7 +2562,8 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
                 <option value="chicago">Chicago 17th</option>
                 <option value="harvard">Harvard</option>
                 <option value="ieee">IEEE</option>
-                <option value="turabian">Turabian</option>
+                <option value="turabian">Turabian 9th</option>
+                <option value="isnad">ISNAD — Ilmu Hadits & Kajian Islam</option>
               </select>
             </div>
             <div>
@@ -2669,11 +2719,12 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
             <div class="tip-card-icon">📚</div>
             <h3>Standar Sitasi & Daftar Pustaka</h3>
             <ul>
-              <li><strong>APA 7:</strong> Ilmu sosial, psikologi, ekonomi Islam</li>
-              <li><strong>Chicago 17:</strong> Sejarah, humaniora, teologi</li>
-              <li><strong>Harvard:</strong> Bisnis, ekonomi, manajemen</li>
-              <li><strong>IEEE:</strong> Teknik, informatika, sains komputer</li>
-              <li><strong>Turabian:</strong> Karya akademis mahasiswa (tesis/disertasi)</li>
+              <li><strong>APA 7:</strong> Ilmu sosial, psikologi, ekonomi Islam, manajemen</li>
+              <li><strong>Chicago 17:</strong> Sejarah, humaniora, teologi, kajian klasik</li>
+              <li><strong>Harvard:</strong> Bisnis, ekonomi, manajemen, kebijakan publik</li>
+              <li><strong>IEEE:</strong> Teknik, informatika, sains komputer, STEM</li>
+              <li><strong>Turabian 9th:</strong> Tesis/disertasi, makalah akademis mahasiswa (mirip Chicago)</li>
+              <li><strong>ISNAD (إسناد):</strong> Kajian Islam, hadits, fiqh, tafsir — format sanad tradisional + akademis modern</li>
             </ul>
             <p style="margin-top:8px;">Semua referensi dari <strong>6 sumber</strong> (CrossRef + DOAJ + Europe PMC + OpenAlex + 🟠Scopus + Semantic Scholar) memiliki DOI terverifikasi. Scopus-indexed filter memastikan hanya jurnal bereputasi tinggi. Semantic Scholar menambah 200 juta paper global.</p>
           </div>
@@ -2997,7 +3048,8 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
                   <option value="chicago">Chicago 17th</option>
                   <option value="harvard">Harvard</option>
                   <option value="ieee">IEEE</option>
-                  <option value="turabian">Turabian</option>
+                  <option value="turabian">Turabian 9th</option>
+                  <option value="isnad">ISNAD — Ilmu Hadits & Kajian Islam</option>
                 </select>
               </div>
               <div>
@@ -3408,28 +3460,37 @@ function isLoggedIn() {
 
 function checkAuthOnLoad() {
   if (isLoggedIn()) {
+    // Sudah login → langsung ke AI Writer
     onAuthSuccess(getSession(), false);
   } else {
-    // Tampilkan AI Writer langsung — semua halaman bisa dilihat
-    // Login hanya diperlukan saat generate konten AI
-    var wp = document.getElementById('page-writer');
-    var nw = document.querySelector('[data-page="writer"]');
-    if (wp) {
+    // Belum login → tampilkan landing page agar tombol Daftar/Login bisa diklik
+    // page-landing sudah class="page active" di HTML, biarkan saja
+    var lp = document.getElementById('page-landing');
+    if (lp) {
       document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
-      wp.classList.add('active');
+      lp.classList.add('active');
     }
-    if (nw) {
-      document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
-      nw.classList.add('active');
-    }
+    // Update topbar title
     var topbar = document.getElementById('topbarTitle');
-    if (topbar) topbar.textContent = 'AI Writer';
+    if (topbar) topbar.textContent = 'Beranda';
+    // Tampilkan tombol Login di topbar dan sidebar
+    var loginBtn = document.getElementById('topbarLoginBtn');
+    if (loginBtn) loginBtn.style.display = 'inline-flex';
+    var sidebarLogin = document.getElementById('sidebarLoginSection');
+    if (sidebarLogin) sidebarLogin.style.display = '';
   }
 }
 
 function onAuthSuccess(session, showToast = true) {
   hideAuthModal();
   updateMemberBadge(session);
+  // Sembunyikan login buttons, tampilkan Beranda nav
+  var loginBtn = document.getElementById('topbarLoginBtn');
+  if (loginBtn) loginBtn.style.display = 'none';
+  var sidebarLogin = document.getElementById('sidebarLoginSection');
+  if (sidebarLogin) sidebarLogin.style.display = 'none';
+  var berandaNav = document.getElementById('navBeranda');
+  if (berandaNav) berandaNav.style.display = '';
   // Navigate to writer
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -3617,13 +3678,18 @@ function doLogout() {
   if (!confirm('Yakin ingin keluar dari Scholaris?')) return;
   clearSession();
   updateMemberBadge(null);
-  // Back to landing
+  // Tampilkan login buttons, sembunyikan beranda nav
+  var loginBtn = document.getElementById('topbarLoginBtn');
+  if (loginBtn) loginBtn.style.display = 'inline-flex';
+  var sidebarLogin = document.getElementById('sidebarLoginSection');
+  if (sidebarLogin) sidebarLogin.style.display = '';
+  var berandaNav = document.getElementById('navBeranda');
+  if (berandaNav) berandaNav.style.display = 'none';
+  // Kembali ke landing page
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const lp = document.getElementById('page-landing');
   if (lp) lp.classList.add('active');
-  const nl = document.getElementById('nav-landing');
-  if (nl) nl.classList.add('active');
   document.getElementById('topbarTitle').textContent = 'Beranda';
   toast('Anda telah logout. Sampai jumpa!');
 }
@@ -5027,7 +5093,24 @@ ABSOLUTE RULES — NEVER VIOLATE:
     thesis_chapter:      `Write a doctoral/master's thesis chapter of exceptional depth and rigor: sophisticated theoretical positioning, comprehensive critical engagement with the literature, systematic analysis grounded in the research framework, rich interpretation connecting micro-findings to macro-theory, scholarly nuance throughout. Target: 8,000–12,000 words.`,
   };
 
-  return base + '\n\nSPECIFIC MODE INSTRUCTIONS:\n' + (modeInstructions[mode] || modeInstructions.article_full);
+  // Instruksi khusus per gaya sitasi
+  const citeInstructions = {
+    apa7:     'Use APA 7th Edition. In-text: (Author, Year). Reference list: alphabetical by author, hanging indent, all DOIs as https://doi.org/...',
+    chicago:  'Use Chicago 17th Author-Date. In-text: (Author Year, page). Bibliography: alphabetical, first line flush, subsequent lines indented.',
+    harvard:  'Use Harvard referencing. In-text: (Author Year). Reference list: alphabetical, include accessed date for online sources.',
+    ieee:     'Use IEEE style. In-text: bracketed numbers [1], [2], etc. Reference list: numbered in order of first citation. Author initials before surname.',
+    turabian: 'Use Turabian 9th Edition Author-Date. In-text: (Author Year, page). Bibliography: same format as Chicago 17, alphabetical by author, full DOI URLs.',
+    isnad: `Use ISNAD citation style (إسناد) — the scholarly citation method for Islamic studies:
+- For classical Islamic sources (hadith, tafsir, fiqh): cite as — Pengarang/Perawi (Tahun/abad). Judul Kitab. Jilid:halaman. Penerbit.
+- For modern academic papers: Author (Year). "Title." Journal, Jilid (No.): Pages. DOI.
+- In-text citation: (Nama Pengarang, Tahun, Jilid:Halaman) for classical; (Author, Year) for modern.
+- For hadith primary sources: mention the chain (rantai sanad) briefl: "diriwayatkan oleh X dari Y dari Z... dalam [Kitab], No. Hadits."
+- Bibliography/Daftar Pustaka: list classical sources first (by Islamic century/hijri year), then modern sources alphabetically.
+- Prioritize using Arabic transliteration standards (Library of Congress or IJMES) for classical source titles.`
+  };
+  const citeNote = '\n\nCITATION STYLE: ' + (citeInstructions[citeStyle] || citeInstructions.apa7);
+
+  return base + citeNote + '\n\nSPECIFIC MODE INSTRUCTIONS:\n' + (modeInstructions[mode] || modeInstructions.article_full);
 }
 
 function getSegmentInstruction(segId, mode, lang, citeStyle, segIdx, totalSegs) {
@@ -6154,9 +6237,10 @@ function renderSearchResults(refs) {
       '</div>' +
       abstractHtml +
       '<div class="rf-ref-actions">' +
-        '<button class="btn btn-sm btn-secondary" onclick="copyRefAPA(' + i + ')">📋 APA7</button>' +
-        '<button class="btn btn-sm btn-secondary" onclick="copyRefChicago(' + i + ')">📋 Chicago</button>' +
-        '<button class="btn btn-sm btn-secondary" onclick="copyRefIEEE(' + i + ')">📋 IEEE</button>' +
+        '<button class="btn btn-sm btn-secondary" onclick="copyRefByStyle(' + i + ',"apa7")">📋 APA7</button>' +
+        '<button class="btn btn-sm btn-secondary" onclick="copyRefByStyle(' + i + ',"chicago")">📋 Chicago</button>' +
+        '<button class="btn btn-sm btn-secondary" onclick="copyRefByStyle(' + i + ',"turabian")">📋 Turabian</button>' +
+        '<button class="btn btn-sm btn-secondary" onclick="copyRefByStyle(' + i + ',"isnad")">📋 ISNAD</button>' +
         '<button class="btn btn-sm btn-secondary" onclick="addToBiblio(' + i + ')">➕ Bibliografi</button>' +
         (r.isOA && r.oaUrl ? '<a href="' + r.oaUrl + '" target="_blank" class="btn btn-sm btn-secondary">🔓 Unduh PDF</a>' : '') +
       '</div>' +
@@ -6165,35 +6249,16 @@ function renderSearchResults(refs) {
 }
 
 // ── Format helper baru ────────────────────────────────────────────
-function copyRefChicago(idx) {
-  const r = searchResults[idx]; if (!r) return;
-  const auth = (r.authors||[]).map(a => (a.full || (a.given+' '+a.family).trim()) || 'Unknown').join(', ');
-  const doi  = r.doi ? ' https://doi.org/' + r.doi + '.' : '';
-  const cite = auth + '. "' + r.title + '." ' +
-    (r.journal ? r.journal + ' ' : '') +
-    (r.volume ? r.volume : '') + (r.issue ? ', no. ' + r.issue : '') +
-    ' (' + (r.year||'n.d.') + ')' +
-    (r.pages ? ': ' + r.pages : '') + '.' + doi;
-  copyToClipboard(cite);
-  toast('Disalin — format Chicago');
+// ── Unified single-ref copy by style ─────────────────────────────
+function copyRefByStyle(idx, style) {
+  var r = searchResults[idx];
+  if (!r) return;
+  copyToClipboard(formatRef(r, style || 'apa7'));
+  toast('Disalin — format ' + (style || 'apa7').toUpperCase());
 }
-
-function copyRefIEEE(idx) {
-  const r = searchResults[idx]; if (!r) return;
-  const auth = (r.authors||[]).slice(0,6).map(a => {
-    const given = (a.given||'').split(' ').map(n=>n[0]||'').join('.') + '.';
-    return given + ' ' + (a.family || a.full || 'Unknown');
-  }).join(', ') + (r.authors && r.authors.length > 6 ? ' et al.' : '');
-  const doi = r.doi ? ', doi: ' + r.doi : '';
-  const cite = auth + ', "' + r.title + '," ' +
-    (r.journal ? r.journal + ', ' : '') +
-    (r.volume ? 'vol. ' + r.volume + ', ' : '') +
-    (r.issue  ? 'no. ' + r.issue + ', ' : '') +
-    (r.pages  ? 'pp. ' + r.pages + ', ' : '') +
-    (r.year||'n.d.') + doi + '.';
-  copyToClipboard(cite);
-  toast('Disalin — format IEEE');
-}
+// Alias lama — backward compat
+function copyRefChicago(idx) { copyRefByStyle(idx, 'chicago'); }
+function copyRefIEEE(idx)    { copyRefByStyle(idx, 'ieee'); }
 
 // ---- PARAPHRASER ----
 async function doParaphrase() {
@@ -6330,23 +6395,102 @@ function clearBibliography() {
   if (!confirm('Hapus seluruh bibliografi?')) return;
   bibliography = []; saveBibliography(); renderBibliography();
 }
+
+var _biblioStyle = 'apa7';
+
+function setBiblioStyle(s) {
+  _biblioStyle = s;
+  document.querySelectorAll('.biblio-style-btn').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.style === s);
+  });
+  renderBibliography();
+}
+
+function _biblioRow(html, idx) {
+  return '<div style="display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--border);">' +
+    '<div style="flex:1;font-size:.85rem;line-height:1.7;">' + html + '</div>' +
+    '<button class="btn-icon" onclick="removeBiblio(' + idx + ')" title="Hapus">×</button>' +
+  '</div>';
+}
+
 function renderBibliography() {
-  const sort = document.getElementById('biblioSort') ? document.getElementById('biblioSort').value : 'alpha';
-  let sorted = [...bibliography];
-  if (sort === 'alpha') sorted.sort((a,b) => ((a.authors[0]||{}).family||'').localeCompare((b.authors[0]||{}).family||''));
-  else if (sort === 'year_desc') sorted.sort((a,b) => (b.year||0)-(a.year||0));
-  else sorted.sort((a,b) => (a.year||0)-(b.year||0));
-  document.getElementById('biblioCount').textContent = sorted.length;
-  const el = document.getElementById('biblioArea');
-  if (!sorted.length) { el.innerHTML = '<p style="color:var(--text3);font-style:italic;">Belum ada referensi. Cari dan tambahkan melalui Reference Finder atau AI Writer.</p>'; return; }
-  el.innerHTML = sorted.map((r, i) => {
-    const apa = formatAPA7(r);
-    return `<div style="display:flex;gap:8px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border);">
-      <div style="flex:1;font-size:.88rem;">${escHtml(apa)}</div>
-      <button class="btn-icon" onclick="removeBiblio(${bibliography.indexOf(r)})" title="Hapus">✕</button>
-    </div>`;
+  var sortEl = document.getElementById('biblioSort');
+  var sort   = sortEl ? sortEl.value : 'alpha';
+  var sorted = bibliography.slice();
+  if (sort === 'alpha') {
+    sorted.sort(function(a,b) {
+      var fa = (a.authors && a.authors[0] && a.authors[0].family) || '';
+      var fb = (b.authors && b.authors[0] && b.authors[0].family) || '';
+      return fa.localeCompare(fb);
+    });
+  } else if (sort === 'year_desc') {
+    sorted.sort(function(a,b) { return (parseInt(b.year)||0)-(parseInt(a.year)||0); });
+  } else {
+    sorted.sort(function(a,b) { return (parseInt(a.year)||0)-(parseInt(b.year)||0); });
+  }
+  var cntEl = document.getElementById('biblioCount');
+  if (cntEl) cntEl.textContent = sorted.length;
+  var el = document.getElementById('biblioArea');
+  if (!el) return;
+  if (!sorted.length) {
+    el.innerHTML = '<p style="color:var(--text3);font-style:italic;">Belum ada referensi.</p>';
+    return;
+  }
+  // Style-switcher tabs
+  var tabEl = document.getElementById('biblioStyleTabs');
+  if (!tabEl) {
+    tabEl = document.createElement('div');
+    tabEl.id = 'biblioStyleTabs';
+    tabEl.style.cssText = 'display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;';
+    [['apa7','APA 7'],['chicago','Chicago 17'],['harvard','Harvard'],
+     ['ieee','IEEE'],['turabian','Turabian 9'],['isnad','ISNAD إسناد']]
+    .forEach(function(s) {
+      var btn = document.createElement('button');
+      btn.className = 'btn btn-sm btn-secondary biblio-style-btn' + (s[0] === _biblioStyle ? ' active' : '');
+      btn.dataset.style = s[0]; btn.textContent = s[1];
+      btn.addEventListener('click', function() { setBiblioStyle(s[0]); });
+      tabEl.appendChild(btn);
+    });
+    el.parentNode.insertBefore(tabEl, el);
+  } else {
+    tabEl.querySelectorAll('.biblio-style-btn').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.style === _biblioStyle);
+    });
+  }
+  // ISNAD: pisahkan sumber primer (klasik/hadits) dan sekunder (modern)
+  if (_biblioStyle === 'isnad') {
+    var rows = '';
+    var klasik   = sorted.filter(function(r){ var t=_isnadType(r); return t==='hadith'||t==='classical'; });
+    var sekunder = sorted.filter(function(r){ var t=_isnadType(r); return t!=='hadith'&&t!=='classical'; });
+    if (klasik.length) {
+      rows += '<div style="font-weight:700;font-size:.8rem;color:var(--accent);padding:5px 8px;'
+           +  'background:var(--accent-soft);border-radius:4px;margin:8px 0 4px;">'
+           +  'A. Mashadir Ashliyyah — Sumber Primer Klasik &amp; Hadits</div>';
+      klasik.forEach(function(r){ rows += _biblioRow(escHtml(formatISNAD(r)), bibliography.indexOf(r)); });
+    }
+    if (sekunder.length) {
+      rows += '<div style="font-weight:700;font-size:.8rem;color:var(--accent);padding:5px 8px;'
+           +  'background:var(--accent-soft);border-radius:4px;margin:10px 0 4px;">'
+           +  'B. Mashadir Thanawiyyah — Sumber Sekunder Akademis</div>';
+      sekunder.forEach(function(r){ rows += _biblioRow(escHtml(formatISNAD(r)), bibliography.indexOf(r)); });
+    }
+    el.innerHTML = rows; return;
+  }
+  var note = _biblioStyle === 'turabian'
+    ? '<div style="font-size:.72rem;color:var(--text3);margin-bottom:8px;padding:5px 10px;'
+    +  'background:var(--bg2);border-radius:5px;">'
+    +  '\u24d8 Format Turabian Author-Date. Untuk Notes-Bibliography, lihat Chicago 17.</div>'
+    : '';
+  el.innerHTML = note + sorted.map(function(r) {
+    var idx = bibliography.indexOf(r);
+    var sc  = r.isScopus ? ' <span style="font-size:.62rem;background:rgba(249,115,22,.12);color:#c2410c;'
+            + 'padding:1px 5px;border-radius:3px;">' + '\U0001f7e0' + ' Scopus</span>' : '';
+    var s2  = r.source === 'Semantic Scholar'
+            ? ' <span style="font-size:.62rem;background:rgba(139,92,246,.1);color:#6d28d9;padding:1px 5px;border-radius:3px;">S2</span>' : '';
+    return _biblioRow(escHtml(formatRef(r, _biblioStyle)) + sc + s2, idx);
   }).join('');
 }
+
 
 // ---- FORMATTING ----
 function formatAPA7(ref) {
@@ -6368,6 +6512,304 @@ function formatAPA7(ref) {
   cite += '.';
   if (ref.doi) cite += ' https://doi.org/' + ref.doi;
   return cite;
+}
+
+// =============================================================
+// FORMAT TURABIAN 9th EDITION -- Kate Turabian (2018)
+// TWO SYSTEMS: Notes-Bibliography (NB) & Author-Date (AD)
+// =============================================================
+
+function _turAuthStr(authors) {
+  var au = authors || [];
+  if (!au.length) return 'Unknown Author';
+  function inv(a) {
+    var f = (a.family||'').trim(), g = (a.given||'').trim();
+    return f ? (g ? f + ', ' + g : f) : (a.full || 'Unknown');
+  }
+  function norm(a) {
+    var f = (a.family||'').trim(), g = (a.given||'').trim();
+    return g && f ? g + ' ' + f : (a.full || 'Unknown');
+  }
+  if (au.length === 1) return inv(au[0]);
+  if (au.length === 2) return inv(au[0]) + ', and ' + norm(au[1]);
+  if (au.length === 3) return inv(au[0]) + ', ' + norm(au[1]) + ', and ' + norm(au[2]);
+  return inv(au[0]) + ', ' + norm(au[1]) + ', ' + norm(au[2]) + ', et al.';
+}
+
+function formatTurabianAD(ref) {
+  if (!ref) return '';
+  var auth  = _turAuthStr(ref.authors);
+  var year  = (ref.year  || 'n.d.').toString();
+  var title = (ref.title || '').trim();
+  var jour  = (ref.journal || '').trim();
+  var vol   = (ref.volume  || '').toString().trim();
+  var iss   = (ref.issue   || '').toString().trim();
+  var pages = (ref.pages   || '').toString().trim();
+  var doi   = ref.doi ? ' https://doi.org/' + ref.doi + '.' : '';
+  var s = auth + '. ' + year + '. "' + title + '." ';
+  if (jour)  s += jour;
+  if (vol)   s += ' ' + vol;
+  if (iss)   s += ' (' + iss + ')';
+  if (pages) s += ': ' + pages;
+  s += '.' + doi;
+  return s;
+}
+
+function formatTurabianNB(ref) {
+  if (!ref) return '';
+  var auth  = _turAuthStr(ref.authors);
+  var year  = (ref.year  || 'n.d.').toString();
+  var title = (ref.title || '').trim();
+  var jour  = (ref.journal || '').trim();
+  var vol   = (ref.volume  || '').toString().trim();
+  var iss   = (ref.issue   || '').toString().trim();
+  var pages = (ref.pages   || '').toString().trim();
+  var doi   = ref.doi ? ' https://doi.org/' + ref.doi + '.' : '';
+  var s = auth + '. "' + title + '." ';
+  if (jour)  s += jour;
+  if (vol)   s += ' ' + vol;
+  if (iss)   s += ', no. ' + iss;
+  s += ' (' + year + ')';
+  if (pages) s += ': ' + pages;
+  s += '.' + doi;
+  return s;
+}
+
+function formatTurabianIntext(ref, system, page) {
+  var a    = (ref.authors || [])[0];
+  var fam  = a ? (a.family || a.full || 'Unknown').split(' ').pop() : 'Unknown';
+  var year = ref.year || 'n.d.';
+  if ((system || 'ad') === 'nb') {
+    var sh = (ref.title || '').slice(0, 35) + (ref.title && ref.title.length > 35 ? '...' : '');
+    return fam + ', "' + sh + (page ? '," ' + page : '"') + '.';
+  }
+  return '(' + fam + ' ' + year + (page ? ', ' + page : '') + ')';
+}
+
+function formatTurabianAD(ref) {
+  if (!ref) return '';
+  var auth  = _turAuthStr(ref.authors);
+  var year  = (ref.year  || 'n.d.').toString();
+  var title = (ref.title || '').trim();
+  var jour  = (ref.journal || '').trim();
+  var vol   = (ref.volume  || '').toString().trim();
+  var iss   = (ref.issue   || '').toString().trim();
+  var pages = (ref.pages   || '').toString().trim();
+  var doi   = ref.doi ? ' https://doi.org/' + ref.doi + '.' : '';
+  var s = auth + '. ' + year + '. "' + title + '." ';
+  if (jour)  s += jour;
+  if (vol)   s += ' ' + vol;
+  if (iss)   s += ' (' + iss + ')';
+  if (pages) s += ': ' + pages;
+  s += '.' + doi;
+  return s;
+}
+
+// =============================================================
+// FORMAT ISNAD -- Implementasi Akademis Lengkap (4 tipe sumber)
+// IJMES, Studia Islamica, Islamic Law and Society
+// =============================================================
+
+function _isnadType(ref) {
+  if (!ref) return 'modern';
+  var title = (ref.title || '').toLowerCase();
+  var jrnl  = (ref.journal || '').toLowerCase();
+  var yr    = parseInt(ref.year) || 2000;
+  var hadithKitab = ['bukhari','muslim','tirmidhi','abu dawud','nasai','ibn majah',
+    'musnad','muwatta','sahih','sunan','mustadrak','musannaf','tabrani','darimi',
+    'bayhaqi','daraqutni','kanz','mishkat','riyad','bulugh'];
+  for (var h = 0; h < hadithKitab.length; h++) {
+    if (title.indexOf(hadithKitab[h]) >= 0) return 'hadith';
+  }
+  if (yr < 1800) return 'classical';
+  var islamicTerms = ['islam','muslim','quran','arabic','middle east','hadith',
+    'fiqh','tafsir','shariah','syariah','tasawuf','aqidah','usul','maqasid',
+    'zakat','waqf','fatwa','ijtihad','ulama','sunna'];
+  for (var j = 0; j < islamicTerms.length; j++) {
+    if (jrnl.indexOf(islamicTerms[j]) >= 0 || title.indexOf(islamicTerms[j]) >= 0)
+      return 'islamic_modern';
+  }
+  return 'modern';
+}
+
+function _isnadAuth(authors) {
+  var au = authors || [];
+  if (!au.length) return 'Majhul al-Muallif';
+  function one(a) {
+    var f = (a.family||'').trim(), g = (a.given||'').trim();
+    return f ? (g ? f + ', ' + g : f) : (a.full || 'Unknown');
+  }
+  if (au.length === 1) return one(au[0]);
+  if (au.length === 2) return one(au[0]) + ' wa ' + one(au[1]);
+  if (au.length === 3) return one(au[0]) + ', ' + one(au[1]) + ', wa ' + one(au[2]);
+  return one(au[0]) + ' wa akharun';
+}
+
+function _isnadHadith(ref) {
+  var auth  = _isnadAuth(ref.authors);
+  var title = (ref.title || '').trim();
+  var year  = (ref.year  || 'n.d.').toString();
+  var vol   = ref.volume ? 'Juz\u02bc ' + ref.volume : '';
+  var pages = ref.pages  ? 'hlm. ' + ref.pages : '';
+  var doi   = ref.doi ? ' DOI: ' + ref.doi + '.' : '';
+  var hijri = parseInt(year) < 1400 ? 'w. ' + year + 'H' : year;
+  var s = auth + ' (' + hijri + '). ' + title + '. ';
+  if (vol)   s += vol + '. ';
+  if (pages) s += pages + '.';
+  if (doi)   s += doi;
+  return s.trim();
+}
+
+function _isnadClassical(ref) {
+  var auth  = _isnadAuth(ref.authors);
+  var title = (ref.title || '').trim();
+  var year  = (ref.year  || 'n.d.').toString();
+  var jrnl  = (ref.journal || '').trim();
+  var vol   = ref.volume ? 'Juz\u02bc ' + ref.volume : '';
+  var pages = ref.pages  ? 'hlm. ' + ref.pages : '';
+  var doi   = ref.doi ? ' DOI: ' + ref.doi + '.' : '';
+  var hijri = parseInt(year) < 1400 ? 'w. ' + year + 'H' : year;
+  var s = auth + ' (' + hijri + '). "' + title + '." ';
+  if (vol)   s += vol + '. ';
+  if (jrnl)  s += jrnl + '. ';
+  if (pages) s += pages + '.';
+  if (doi)   s += doi;
+  return s.trim();
+}
+
+function _isnadIslamicModern(ref) {
+  var auth  = _isnadAuth(ref.authors);
+  var title = (ref.title   || '').trim();
+  var jour  = (ref.journal || '').trim();
+  var vol   = (ref.volume  || '').toString().trim();
+  var iss   = (ref.issue   || '').toString().trim();
+  var pages = (ref.pages   || '').toString().trim();
+  var year  = (ref.year    || 'n.d.').toString();
+  var doi   = ref.doi ? ' DOI: https://doi.org/' + ref.doi + '.' : '';
+  var s = auth + '. "' + title + '." ';
+  if (jour)  s += jour;
+  if (vol)   s += ' ' + vol;
+  if (iss)   s += ', no. ' + iss;
+  s += ' (' + year + ')';
+  if (pages) s += ': ' + pages;
+  s += '.' + doi;
+  return s;
+}
+
+function _isnadModern(ref) {
+  var auth  = _isnadAuth(ref.authors);
+  var title = (ref.title   || '').trim();
+  var jour  = (ref.journal || '').trim();
+  var vol   = (ref.volume  || '').toString().trim();
+  var iss   = (ref.issue   || '').toString().trim();
+  var pages = (ref.pages   || '').toString().trim();
+  var year  = (ref.year    || 'n.d.').toString();
+  var doi   = ref.doi ? ' https://doi.org/' + ref.doi + '.' : '';
+  var s = auth + ' (' + year + '). "' + title + '." ';
+  if (jour)  s += jour;
+  if (vol)   s += ', Jilid ' + vol;
+  if (iss)   s += ', No. ' + iss;
+  s += ' (' + year + ')';
+  if (pages) s += ': ' + pages;
+  s += '.' + doi;
+  return s;
+}
+
+function formatISNADIntext(ref, page) {
+  var type = _isnadType(ref);
+  var a    = (ref.authors || [])[0];
+  var fam  = a ? (a.family || a.full || 'Unknown') : 'Unknown';
+  var year = ref.year || 'n.d.';
+  var pg   = page ? ':' + page : '';
+  if (type === 'hadith') {
+    var sh = (ref.title || '').split(' ').slice(0,3).join(' ');
+    return '(' + sh + pg + ')';
+  }
+  if (type === 'classical') {
+    var yr2 = parseInt(year) < 1400 ? year + 'H' : year;
+    return '(' + fam + ' ' + yr2 + pg + ')';
+  }
+  return '(' + fam + ' ' + year + (page ? ', ' + page : '') + ')';
+}
+
+function formatISNADIntext(ref, page) {
+  var type = _isnadType(ref);
+  var a    = (ref.authors || [])[0];
+  var fam  = a ? (a.family || a.full || 'Unknown') : 'Unknown';
+  var year = ref.year || 'n.d.';
+  var pg   = page ? ':' + page : '';
+  if (type === 'hadith') {
+    var sh = (ref.title || '').split(' ').slice(0,3).join(' ');
+    return '(' + sh + pg + ')';
+  }
+  if (type === 'classical') {
+    var yr2 = parseInt(year) < 1400 ? year + 'H' : year;
+    return '(' + fam + ' ' + yr2 + pg + ')';
+  }
+  return '(' + fam + ' ' + year + (page ? ', ' + page : '') + ')';
+}
+
+// ── Format router — pilih fungsi berdasarkan citeStyle ───────────
+function formatRef(ref, style) {
+  style = (style || 'apa7').toLowerCase();
+  switch (style) {
+    case 'apa7':     return formatAPA7(ref);
+    case 'chicago':  return formatChicago(ref);
+    case 'ieee':     return formatIEEE(ref);
+    case 'harvard':  return formatHarvard(ref);
+    case 'turabian': return formatTurabian(ref);
+    case 'isnad':    return formatISNAD(ref);
+    default:         return formatAPA7(ref);
+  }
+}
+
+// ── Format Chicago 17 (standalone, full) ─────────────────────────
+function formatChicago(ref) {
+  if (!ref) return '';
+  var auth = (ref.authors || []).map(function(a) {
+    return (a.full || ((a.given || '') + ' ' + (a.family || '')).trim()) || 'Unknown';
+  }).join(', ');
+  var doi  = ref.doi ? ' https://doi.org/' + ref.doi + '.' : '';
+  return auth + '. "' + (ref.title || '') + '." ' +
+    (ref.journal ? ref.journal + ' ' : '') +
+    (ref.volume  ? ref.volume : '') +
+    (ref.issue   ? ', no. ' + ref.issue : '') +
+    ' (' + (ref.year || 'n.d.') + ')' +
+    (ref.pages ? ': ' + ref.pages : '') + '.' + doi;
+}
+
+// ── Format IEEE ───────────────────────────────────────────────────
+function formatIEEE(ref) {
+  if (!ref) return '';
+  var auth = (ref.authors || []).slice(0, 6).map(function(a) {
+    var given  = (a.given || '').split(' ').map(function(n) { return n[0] ? n[0] + '.' : ''; }).join(' ');
+    return (given + ' ' + (a.family || a.full || '')).trim();
+  }).join(', ') + ((ref.authors && ref.authors.length > 6) ? ' et al.' : '');
+  var doi = ref.doi ? ', doi: ' + ref.doi : '';
+  return auth + ', "' + (ref.title || '') + '," ' +
+    (ref.journal ? ref.journal + ', ' : '') +
+    (ref.volume  ? 'vol. ' + ref.volume + ', ' : '') +
+    (ref.issue   ? 'no. ' + ref.issue + ', ' : '') +
+    (ref.pages   ? 'pp. ' + ref.pages + ', ' : '') +
+    (ref.year || 'n.d.') + doi + '.';
+}
+
+// ── Format Harvard ────────────────────────────────────────────────
+function formatHarvard(ref) {
+  if (!ref) return '';
+  var auths = (ref.authors || []).map(function(a) {
+    var ini = (a.given || '').split(' ').map(function(n) { return n[0] ? n[0] + '.' : ''; }).join('');
+    return (a.family || a.full || 'Unknown') + (ini ? ', ' + ini : '');
+  });
+  var authStr = auths.length <= 3
+    ? auths.join(', ')
+    : auths.slice(0, 3).join(', ') + ' et al.';
+  var doi = ref.doi ? ' [online]. Available at: https://doi.org/' + ref.doi + ' [Accessed ' + new Date().getFullYear() + '].' : '';
+  return authStr + ' (' + (ref.year || 'n.d.') + ') "' + (ref.title || '') + '",' +
+    (ref.journal ? ' ' + ref.journal + ',' : '') +
+    (ref.volume  ? ' ' + ref.volume : '') +
+    (ref.issue   ? '(' + ref.issue + ')' : '') +
+    (ref.pages   ? ' pp. ' + ref.pages : '') + '.' + doi;
 }
 
 // ---- DISPLAY ----
@@ -6428,10 +6870,31 @@ function copyMtOutput() {
   copyToClipboard(text);
 }
 function copyEl(id) { copyToClipboard(document.getElementById(id).innerText); }
-function copyRefAPA(idx) { if (searchResults[idx]) copyToClipboard(formatAPA7(searchResults[idx])); }
-function copyRefs() { copyToClipboard(lastRefs.map((r,i) => '['+(i+1)+'] '+formatAPA7(r)).join('\n\n')); }
-function copyAllSearchRefs() { copyToClipboard(searchResults.map((r,i) => '['+(i+1)+'] '+formatAPA7(r)).join('\n\n')); }
-function copyBibliography() { copyToClipboard(bibliography.map(r => formatAPA7(r)).join('\n\n')); }
+function copyRefAPA(idx) {
+  if (!searchResults[idx]) return;
+  var styleEl = document.getElementById('citeStyle');
+  var style   = styleEl ? styleEl.value : 'apa7';
+  copyToClipboard(formatRef(searchResults[idx], style));
+  toast('Disalin — format ' + style.toUpperCase());
+}
+function copyRefs() {
+  var styleEl = document.getElementById('citeStyle');
+  var style   = styleEl ? styleEl.value : 'apa7';
+  copyToClipboard(lastRefs.map(function(r, i) { return '['+(i+1)+'] '+formatRef(r, style); }).join('\n\n'));
+  toast('Semua referensi disalin — ' + style.toUpperCase());
+}
+function copyAllSearchRefs(forceStyle) {
+  var styleEl = document.getElementById('citeStyle');
+  var style   = forceStyle || (styleEl ? styleEl.value : 'apa7');
+  copyToClipboard(searchResults.map(function(r, i) { return '['+(i+1)+'] '+formatRef(r, style); }).join('\n\n'));
+  toast(searchResults.length + ' referensi disalin — ' + style.toUpperCase());
+}
+function copyBibliography() {
+  var styleEl = document.getElementById('citeStyle');
+  var style   = styleEl ? styleEl.value : 'apa7';
+  copyToClipboard(bibliography.map(function(r) { return formatRef(r, style); }).join('\n\n'));
+  toast('Bibliografi disalin — ' + style.toUpperCase());
+}
 
 // exportDOCX: see full async version below
 function exportMtDOCX() {
@@ -6472,12 +6935,12 @@ function generateDocx(markdown, filename) {
     a { color:#1565c0; }
     code { font-family:'Courier New',Courier,monospace; font-size:10pt; background:#f0ede8; }
   </style>
-  <!--[if gte mso 9]><xml>
+  <\x21--[if gte mso 9]><xml>
     <w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument>
   </xml><![endif]-->
 </head>
 <body><div class=WordSection1>${bodyHtml}</div>
-<!--
+/*
 ==============================================================
 SCHOLARIS MEMBERSHIP SYSTEM — GAS CODE.GS ADDITIONS
 Add these functions to your existing Code.gs, then re-deploy.
@@ -6505,15 +6968,15 @@ const MEMBER_SHEET = 'Members';
 
 // Full function code available at: contact admin or request via WA
 ==============================================================
--->
+*/
 
-<!-- Auto-save Indicator -->
+// Auto-save Indicator
 <div class="autosave-indicator" id="autosaveIndicator">
   <span class="as-dot"></span>
   <span id="autosaveMsg">Tersimpan otomatis</span>
 </div>
 
-<!-- Template Library Modal -->
+// Template Library Modal
 <div class="template-library-overlay" id="tlOverlay">
   <div class="tl-modal">
     <div class="tl-header">
@@ -6733,7 +7196,7 @@ function exportAreaToPDF(areaId, filename) {
   Dokumen ini dihasilkan oleh SCHOLARIS Academic Writer Engine &mdash; ${tanggal}
 </div>
 
-<script>
+<scr' + 'ipt>
   // Auto-trigger print dialog setelah render selesai
   window.onload = function() {
     setTimeout(function() { window.print(); }, 600);
@@ -6743,13 +7206,13 @@ function exportAreaToPDF(areaId, filename) {
     setTimeout(function() { window.close(); }, 300);
   };
 <\/script>
-<!-- Auto-save Indicator -->
+// Auto-save Indicator
 <div class="autosave-indicator" id="autosaveIndicator">
   <span class="as-dot"></span>
   <span id="autosaveMsg">Tersimpan otomatis</span>
 </div>
 
-<!-- Template Library Modal -->
+// Template Library Modal
 <div class="template-library-overlay" id="tlOverlay">
   <div class="tl-modal">
     <div class="tl-header">
