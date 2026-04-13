@@ -1702,7 +1702,7 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
     </div>
     <div class="sidebar-footer">
       <div>Scholaris Engine</div>
-      <div class="version-badge" id="versionBadge" onclick="handleVersionClick()" style="cursor:pointer;" title="v9.1">v10.1 Smart and Integrity</div>
+      <div class="version-badge" id="versionBadge" onclick="handleVersionClick()" style="cursor:pointer;" title="v9.1">v10.1 Smart—Integrity</div>
     </div>
   </aside>
 
@@ -2002,7 +2002,7 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
           </button>
           <button class="btn btn-secondary" style="margin-left:8px;" id="btnGenerateRefs" onclick="generateWithRefs()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            Generate + Cari Referensi (4 Sumber)
+            Generate + Cari Referensi (6 Sumber)
           </button>
         </div>
 
@@ -4398,7 +4398,7 @@ async function autoHarvestRefs_(title, instructions, lang, yearFrom, yearTo, tar
 
   // 4. OpenAlex — coverage luas + OA detection
   queries.slice(0, 2).forEach(function(q) {
-    allPromises.push(searchOpenAlex_(q, Math.ceil(perQuery / 2)).catch(function() { return []; }));
+    allPromises.push(searchOpenAlexFull_(q, Math.ceil(perQuery / 2), yearFrom, yearTo, false).catch(function() { return []; })); // BUG-2 FIX: use full version with year filter
   });
 
   // 5. OpenAlex Scopus — filter is_in_scopus:true, jurnal Q1/Q2 terindeks
@@ -6039,6 +6039,7 @@ async function searchReferences() {
   rfAllResults     = final;
   rfFilteredResults = final;
   searchResults    = final;   // kompatibilitas dengan fungsi lama
+  validatedRefPool = final;   // BUG-1 FIX: update global pool agar Paraphraser/Reviewer/MultiTurn/BookMode bisa pakai hasil pencarian ini
 
   totalRefs = Math.max(totalRefs, final.length);
   updateStatsDisplay();
@@ -6280,13 +6281,17 @@ async function doParaphrase() {
   setLoading(true);
   try {
     // Sertakan ref pool hexa-source — paraphraser tetap berbasis referensi nyata
+    // WARN-3 FIX: use buildLockedRefContext_ with auto-harvest if pool empty
+    if (validatedRefPool.length === 0) {
+      // Auto-harvest dari teks yang akan diparafrase (ekstrak kata kunci)
+      const paraTitle = text.slice(0, 200).replace(/<[^>]+>/g, ' ').trim();
+      try {
+        const autoRefs = await autoHarvestRefs_(paraTitle, '', lang, '2019', '2026', 15);
+        if (autoRefs.length > 0) validatedRefPool = autoRefs;
+      } catch(_) {}
+    }
     const paraRefNote = validatedRefPool.length > 0
-      ? '\n\nReferensi terverifikasi (CrossRef+DOAJ+Europe PMC+OpenAlex+Scopus+Semantic Scholar) — gunakan sebagai sitasi jika relevan:\n' +
-        validatedRefPool.slice(0,10).map((r,i)=>{
-          const a=(r.authors||[]).slice(0,2).map(x=>x.family||x.full||'').join(' & ')||'Unknown';
-          const sc = r.isScopus ? ' [🟠Scopus]' : '';
-          return '['+i+'] '+a+' ('+r.year+'). '+r.title.slice(0,60)+'. DOI:'+r.doi+sc;
-        }).join('\n')
+      ? '\n\n' + buildLockedRefContext_(validatedRefPool, 'apa7', lang)
       : '';
 
     const result = await callGAS({
@@ -6326,13 +6331,17 @@ async function doReview() {
   setLoading(true);
   try {
     // Sertakan pool referensi hexa-source agar reviewer bisa evaluasi ketepatan sitasi
+    // WARN-4 FIX: use buildLockedRefContext_ with auto-harvest if pool empty
+    if (validatedRefPool.length === 0) {
+      // Auto-harvest berdasarkan teks naskah yang direview
+      const reviewTitle = text.slice(0, 300).replace(/<[^>]+>/g, ' ').trim();
+      try {
+        const autoRefs = await autoHarvestRefs_(reviewTitle, '', 'id', '2019', '2026', 15);
+        if (autoRefs.length > 0) validatedRefPool = autoRefs;
+      } catch(_) {}
+    }
     const revRefPool = validatedRefPool.length > 0
-      ? '\n\nPOOL REFERENSI TERVERIFIKASI (CrossRef+DOAJ+Europe PMC+OpenAlex+🟠Scopus+Semantic Scholar) — Gunakan untuk mengevaluasi ketepatan dan kelengkapan sitasi:\n' +
-        validatedRefPool.slice(0, 15).map((r, i) => {
-          const a = (r.authors||[]).slice(0,2).map(x=>x.family||x.full||'').filter(Boolean).join(' & ')||'Unknown';
-          const sc = r.isScopus ? ' [🟠 Scopus-Indexed]' : '';
-          return '['+i+'] '+a+' ('+r.year+'). '+r.title.slice(0,70)+'. ['+r.source+sc+'] DOI:'+r.doi;
-        }).join('\n')
+      ? '\n\n' + buildLockedRefContext_(validatedRefPool, 'apa7', 'id')
       : '';
     const reviewerSystem = 'You are a SENIOR ACADEMIC REVIEWER with 20+ years of experience reviewing for top-tier indexed journals. You are known for thorough, constructive, yet uncompromising reviews. ' +
       strictMap[strict] + ' Respond in Bahasa Indonesia unless the manuscript is in English.' + revRefPool;
