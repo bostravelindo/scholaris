@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Source+Sans+3:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/docx@9.0.2/build/index.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@7.8.2/build/index.umd.min.js"></script>
 <style>
 :root {
   --bg: #faf8f5;
@@ -1702,7 +1702,7 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
     </div>
     <div class="sidebar-footer">
       <div>Scholaris Engine</div>
-      <div class="version-badge" id="versionBadge" onclick="handleVersionClick()" style="cursor:pointer;" title="v9.1">v10.1 Smart—Integrity</div>
+      <div class="version-badge" id="versionBadge" onclick="handleVersionClick()" style="cursor:pointer;" title="v9.1">v10.1 Smart and Integrity</div>
     </div>
   </aside>
 
@@ -6917,106 +6917,68 @@ function exportBiblioDOCX() {
 function generateDocx(markdown, filename) {
   if (!markdown || !markdown.trim()) { toast('Tidak ada konten untuk diunduh'); return; }
   try {
+    // Bersihkan markdown dari HTML tags yang mungkin ada
+    const cleanMd = markdown.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ');
     const bodyHtml = marked.parse(markdown);
-    // Word-compatible HTML — dibuka langsung oleh Microsoft Word & LibreOffice
-    const wordDoc = `<html xmlns:o='urn:schemas-microsoft-com:office:office'
-      xmlns:w='urn:schemas-microsoft-com:office:word'
-      xmlns='http://www.w3.org/TR/REC-html40'>
-<head>
-  <meta charset="utf-8">
-  <meta name=ProgId content=Word.Document>
-  <meta name=Generator content="Microsoft Word 15">
-  <title>${filename}</title>
-  <style>
-    @page WordSection1 { size:21cm 29.7cm; margin:2.54cm 2.54cm 2.54cm 2.54cm; mso-header-margin:.49cm; mso-footer-margin:.49cm; }
-    div.WordSection1 { page:WordSection1; }
-    body { font-family:'Times New Roman',Times,serif; font-size:12pt; line-height:2.0; color:#000000; }
-    h1 { font-family:'Times New Roman',Times,serif; font-size:14pt; font-weight:bold; text-align:center; margin:18pt 0 12pt 0; mso-outline-level:1; }
-    h2 { font-family:'Times New Roman',Times,serif; font-size:12pt; font-weight:bold; margin:18pt 0 6pt 0; mso-outline-level:2; }
-    h3 { font-family:'Times New Roman',Times,serif; font-size:12pt; font-weight:bold; font-style:italic; margin:12pt 0 6pt 0; mso-outline-level:3; }
-    p  { font-family:'Times New Roman',Times,serif; font-size:12pt; text-align:justify; text-indent:1.27cm; margin:0 0 6pt 0; }
-    ul,ol { margin-left:1.5cm; font-size:12pt; }
-    li { margin-bottom:3pt; }
-    blockquote { margin:6pt 0 6pt 1.27cm; font-size:11pt; }
-    strong { font-weight:bold; }
-    em { font-style:italic; }
-    hr { border:none; border-top:1pt solid #999; margin:12pt 0; }
-    a { color:#1565c0; }
-    code { font-family:'Courier New',Courier,monospace; font-size:10pt; background:#f0ede8; }
-  </style>
-  <\x21--[if gte mso 9]><xml>
-    <w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument>
-  </xml><![endif]-->
-</head>
-<body><div class=WordSection1>${bodyHtml}</div>
-/*
-==============================================================
-SCHOLARIS MEMBERSHIP SYSTEM — GAS CODE.GS ADDITIONS
-Add these functions to your existing Code.gs, then re-deploy.
-Admin Key default: ScholarisAdmin2025 (ganti di GAS)
-==============================================================
+    const today = new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
 
-// Tambahkan konstanta ini di awal Code.gs:
-const ADMIN_KEY = 'ScholarisAdmin2025';
-const MEMBERSHIP_DAYS = 30;
-const MEMBER_SHEET = 'Members';
+    // Template HTML yang kompatibel 100% dengan Microsoft Word & LibreOffice
+    const wordDoc = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+'<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">' +
+'<html xmlns="http://www.w3.org/1999/xhtml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns:m="http://schemas.microsoft.com/office/2004/12/omml">' +
+'<head>' +
+'<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>' +
+'<meta name="ProgId" content="Word.Document"/>' +
+'<meta name="Generator" content="Microsoft Word 15"/>' +
+'<meta name="Originator" content="Microsoft Word 15"/>' +
+'<title>' + filename + '</title>' +
+'<style>' +
+'@page WordSection1{size:21.0cm 29.7cm;margin:2.54cm 3.0cm 2.54cm 3.0cm;mso-header-margin:1.25cm;mso-footer-margin:1.25cm;mso-page-numbers:1;}' +
+'div.WordSection1{page:WordSection1;}' +
+'body{font-family:"Times New Roman",Times,serif;font-size:12.0pt;line-height:200%;color:black;margin:0;padding:0;}' +
+'h1{font-family:"Times New Roman",Times,serif;font-size:14.0pt;font-weight:bold;text-align:center;line-height:200%;margin-top:24pt;margin-bottom:12pt;color:#1a1a2e;mso-outline-level:1;}' +
+'h2{font-family:"Times New Roman",Times,serif;font-size:13.0pt;font-weight:bold;text-align:left;line-height:200%;margin-top:18pt;margin-bottom:8pt;color:#16213e;mso-outline-level:2;}' +
+'h3{font-family:"Times New Roman",Times,serif;font-size:12.0pt;font-weight:bold;font-style:italic;text-align:left;line-height:200%;margin-top:14pt;margin-bottom:6pt;color:#0f3460;mso-outline-level:3;}' +
+'h4{font-family:"Times New Roman",Times,serif;font-size:12.0pt;font-weight:bold;line-height:200%;margin-top:12pt;margin-bottom:4pt;mso-outline-level:4;}' +
+'p{font-family:"Times New Roman",Times,serif;font-size:12.0pt;line-height:200%;text-align:justify;text-indent:1.27cm;margin-top:0;margin-bottom:6pt;}' +
+'p.no-indent{text-indent:0;}' +
+'ul,ol{margin-left:1.5cm;font-size:12.0pt;line-height:180%;}' +
+'li{margin-bottom:4pt;font-family:"Times New Roman",Times,serif;font-size:12.0pt;}' +
+'blockquote{border-left:3pt solid #8b4513;padding-left:14pt;margin-left:1.27cm;margin-right:1.27cm;font-style:italic;color:#444444;line-height:180%;}' +
+'table{border-collapse:collapse;width:100%;margin-bottom:12pt;}' +
+'td,th{border:1pt solid #999999;padding:6pt 8pt;font-family:"Times New Roman",Times,serif;font-size:11.0pt;}' +
+'th{background-color:#f0ede8;font-weight:bold;}' +
+'code,pre{font-family:"Courier New",Courier,monospace;font-size:10.0pt;background:#f5f5f5;padding:2pt 4pt;}' +
+'hr{border:none;border-top:1pt solid #cccccc;margin:14pt 0;}' +
+'a{color:#1565c0;}' +
+'.cover{text-align:center;margin-bottom:24pt;padding-bottom:14pt;border-bottom:2pt solid #8b4513;}' +
+'.cover-title{font-size:16.0pt;font-weight:bold;color:#1a1a2e;margin-bottom:8pt;}' +
+'.cover-meta{font-size:10.0pt;color:#666666;margin-top:6pt;}' +
+'</style>' +
+'</head>' +
+'<body>' +
+'<div class="WordSection1">' +
+'<div class="cover">' +
+'<div class="cover-title">' + filename.replace(/_/g,' ') + '</div>' +
+'<div class="cover-meta">Dihasilkan oleh SCHOLARIS AI Academic Writer &nbsp;|&nbsp; ' + today + '</div>' +
+'</div>' +
+bodyHtml +
+'</div>' +
+'</body>' +
+'</html>';
 
-// Tambahkan ke doPost() switch/if-else chain:
-// case 'register_member': return output(registerMember(params));
-// case 'login_member':    return output(loginMember(params));
-// case 'activate_member': return output(activateMember(params));
-// case 'deactivate_member': return output(deactivateMember(params));
-// case 'list_members':    return output(listMembers(params));
-// case 'extend_member':   return output(extendMember(params));
-
-// Helper:
-// function output(data) {
-//   return ContentService.createTextOutput(JSON.stringify(data))
-//     .setMimeType(ContentService.MimeType.JSON);
-// }
-
-// Full function code available at: contact admin or request via WA
-==============================================================
-*/
-
-// Auto-save Indicator
-<div class="autosave-indicator" id="autosaveIndicator">
-  <span class="as-dot"></span>
-  <span id="autosaveMsg">Tersimpan otomatis</span>
-</div>
-
-// Template Library Modal
-<div class="template-library-overlay" id="tlOverlay">
-  <div class="tl-modal">
-    <div class="tl-header">
-      <span class="tl-title">📚 Template Library — 20+ Bidang Ilmu</span>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <input type="text" class="tl-search" id="tlSearch" placeholder="Cari template..." oninput="filterTemplates(this.value)">
-        <button class="btn btn-sm btn-secondary" onclick="closeTL()">✕</button>
-      </div>
-    </div>
-    <div class="tl-body">
-      <div class="tl-cats" id="tlCats"></div>
-      <div class="tl-grid" id="tlGrid"></div>
-    </div>
-  </div>
-</div>
-
-</body>
-</html>`;
-
-    const blob = new Blob(['\ufeff' + wordDoc], {
-      type: 'application/vnd.ms-word;charset=utf-8'
-    });
+    const blob = new Blob(['\ufeff' + wordDoc], {type: 'application/msword;charset=utf-8'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = filename + '.doc';
-    document.body.appendChild(a); a.click();
-    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1500);
-    toast('✅ Dokumen Word berhasil diunduh');
+    a.href = url;
+    a.download = (filename || 'scholaris').replace(/[\\\\/:*?"<>|]/g,'_') + '.doc';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
+    toast('✅ Dokumen Word berhasil diunduh!');
   } catch(e) {
     toast('❌ Error export Word: ' + e.message);
-    console.error('Word export error:', e);
+    console.error('generateDocx error:', e);
   }
 }
 
@@ -7274,166 +7236,256 @@ async function exportDOCX() {
   if (!lastOutput || lastOutput.trim().length < 50) {
     return toast('Tidak ada teks untuk dieksport. Generate teks terlebih dahulu.');
   }
-  if (typeof docx === 'undefined') {
-    return toast('Library docx belum termuat. Pastikan koneksi internet aktif, lalu refresh.');
-  }
-
   toast('⏳ Membuat file DOCX...', 2500);
 
-  const { Document, Paragraph, TextRun, HeadingLevel, AlignmentType,
-          PageNumber, NumberFormat, Header, Footer, Packer,
-          WidthType, TableCell, TableRow, Table, BorderStyle,
-          convertInchesToTwip, LevelFormat } = docx;
-
-  // Parse markdown → paragraphs dengan struktur
-  const lines    = lastOutput.split('\n');
-  const docParts = [];
-  let   listBuf  = [];
-
-  const flushList = () => {
-    if (listBuf.length === 0) return;
-    listBuf.forEach(item => {
-      docParts.push(new Paragraph({
-        text: item,
-        bullet: { level: 0 },
-        style: 'ListParagraph',
-        spacing: { after: 60 },
-        run: { font: 'Times New Roman', size: 24 }
-      }));
-    });
-    listBuf = [];
-  };
-
-  const makeRuns = (text) => {
-    // Parse **bold** *italic* `code` inline
-    const parts = [];
-    const rx = /(\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`)/g;
-    let last = 0, m;
-    while ((m = rx.exec(text)) !== null) {
-      if (m.index > last) parts.push(new TextRun({ text: text.slice(last, m.index), font: 'Times New Roman', size: 24 }));
-      if (m[2]) parts.push(new TextRun({ text: m[2], bold: true, font: 'Times New Roman', size: 24 }));
-      else if (m[3]) parts.push(new TextRun({ text: m[3], italics: true, font: 'Times New Roman', size: 24 }));
-      else if (m[4]) parts.push(new TextRun({ text: m[4], font: 'Courier New', size: 22 }));
-      last = rx.lastIndex;
-    }
-    if (last < text.length) parts.push(new TextRun({ text: text.slice(last), font: 'Times New Roman', size: 24 }));
-    return parts.length ? parts : [new TextRun({ text: text, font: 'Times New Roman', size: 24 })];
-  };
-
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (!line) { flushList(); docParts.push(new Paragraph({ text: '', spacing: { after: 100 } })); continue; }
-
-    if (line.startsWith('# '))   { flushList(); docParts.push(new Paragraph({ text: line.slice(2).replace(/\*\*/g,''), heading: HeadingLevel.HEADING_1, spacing: { before: 320, after: 200 } })); }
-    else if (line.startsWith('## '))  { flushList(); docParts.push(new Paragraph({ text: line.slice(3).replace(/\*\*/g,''), heading: HeadingLevel.HEADING_2, spacing: { before: 240, after: 160 } })); }
-    else if (line.startsWith('### ')) { flushList(); docParts.push(new Paragraph({ text: line.slice(4).replace(/\*\*/g,''), heading: HeadingLevel.HEADING_3, spacing: { before: 180, after: 120 } })); }
-    else if (line.startsWith('#### ')){ flushList(); docParts.push(new Paragraph({ text: line.slice(5).replace(/\*\*/g,''), heading: HeadingLevel.HEADING_4, spacing: { before: 140, after: 80 } })); }
-    else if (line.startsWith('- ') || line.startsWith('* ')) { listBuf.push(line.slice(2)); }
-    else if (/^\d+\.\s/.test(line))  { listBuf.push(line.replace(/^\d+\.\s/, '')); }
-    else if (line.startsWith('---') || line.startsWith('===')) { flushList(); }
-    else if (line.startsWith('> ')) {
-      flushList();
-      docParts.push(new Paragraph({
-        children: [new TextRun({ text: line.slice(2), italics: true, color: '444444', font: 'Times New Roman', size: 24 })],
-        indent: { left: convertInchesToTwip(0.5) },
-        spacing: { after: 100 }
-      }));
-    }
-    else {
-      flushList();
-      docParts.push(new Paragraph({
-        children: makeRuns(line),
-        spacing: { after: 120, line: 360 },
-        alignment: AlignmentType.JUSTIFIED
-      }));
-    }
-  }
-  flushList();
-
-  // Ambil judul dari baris pertama atau from writeTitle
   const titleEl  = document.getElementById('writeTitle');
   const docTitle = (titleEl && titleEl.value.trim()) || 'Dokumen SCHOLARIS';
-  const today    = new Date().toLocaleDateString('id-ID', { day:'2-digit', month:'long', year:'numeric' });
-  const wc       = countWords(lastOutput);
   const authorEl = document.getElementById('mbName');
   const author   = (authorEl && authorEl.textContent.trim() !== '—') ? authorEl.textContent.trim() : 'SCHOLARIS User';
+  const today    = new Date().toLocaleDateString('id-ID', {day:'2-digit', month:'long', year:'numeric'});
+  const wc       = countWords(lastOutput);
 
-  const doc = new Document({
-    creator   : 'SCHOLARIS AI Academic Writer',
-    title     : docTitle,
-    description: 'Generated by SCHOLARIS — AI Academic Writer Engine',
-    styles: {
-      default: {
-        document: { run: { font: 'Times New Roman', size: 24 }, paragraph: { spacing: { line: 360 } } }
+  // ── Coba docx.js library terlebih dahulu ────────────────────────
+  try {
+    if (typeof docx === 'undefined') throw new Error('library-not-loaded');
+
+    const { Document, Paragraph, TextRun, HeadingLevel, AlignmentType,
+            Header, Footer, Packer, BorderStyle, convertInchesToTwip } = docx;
+
+    if (!Document || !Packer || !Packer.toBlob) throw new Error('api-missing');
+
+    // Parse markdown → docx paragraphs
+    const mdLines  = lastOutput.split('\n');
+    const docParts = [];
+    let   listBuf  = [];
+
+    const flushList = () => {
+      if (!listBuf.length) return;
+      listBuf.forEach(item => {
+        docParts.push(new Paragraph({
+          text: item.replace(/\*\*/g,'').replace(/\*/g,''),
+          bullet: { level: 0 },
+          spacing: { after: 80, line: 360 }
+        }));
+      });
+      listBuf = [];
+    };
+
+    const makeRuns = (text) => {
+      const parts = [];
+      const rx = /(\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`)/g;
+      let last = 0, m;
+      while ((m = rx.exec(text)) !== null) {
+        if (m.index > last) parts.push(new TextRun({text: text.slice(last, m.index), font:'Times New Roman', size:24}));
+        if (m[2]) parts.push(new TextRun({text: m[2], bold: true, font:'Times New Roman', size:24}));
+        else if (m[3]) parts.push(new TextRun({text: m[3], italics: true, font:'Times New Roman', size:24}));
+        else if (m[4]) parts.push(new TextRun({text: m[4], font:'Courier New', size:22}));
+        last = rx.lastIndex;
+      }
+      if (last < text.length) parts.push(new TextRun({text: text.slice(last), font:'Times New Roman', size:24}));
+      return parts.length ? parts : [new TextRun({text, font:'Times New Roman', size:24})];
+    };
+
+    for (const raw of mdLines) {
+      const line = raw.trim();
+      if (!line) {
+        flushList();
+        docParts.push(new Paragraph({text:'', spacing:{after:120}}));
+        continue;
+      }
+      if (line.startsWith('#### ')) {
+        flushList();
+        docParts.push(new Paragraph({text: line.slice(5).replace(/\*\*/g,''), heading: HeadingLevel.HEADING_4, spacing:{before:140,after:80}}));
+      } else if (line.startsWith('### ')) {
+        flushList();
+        docParts.push(new Paragraph({text: line.slice(4).replace(/\*\*/g,''), heading: HeadingLevel.HEADING_3, spacing:{before:180,after:100}}));
+      } else if (line.startsWith('## ')) {
+        flushList();
+        docParts.push(new Paragraph({text: line.slice(3).replace(/\*\*/g,''), heading: HeadingLevel.HEADING_2, spacing:{before:240,after:140}}));
+      } else if (line.startsWith('# ')) {
+        flushList();
+        docParts.push(new Paragraph({text: line.slice(2).replace(/\*\*/g,''), heading: HeadingLevel.HEADING_1, spacing:{before:320,after:180}}));
+      } else if (line.startsWith('- ') || line.startsWith('* ')) {
+        listBuf.push(line.slice(2));
+      } else if (/^\d+\.\s/.test(line)) {
+        listBuf.push(line.replace(/^\d+\.\s/,''));
+      } else if (line.startsWith('> ')) {
+        flushList();
+        docParts.push(new Paragraph({
+          children: [new TextRun({text: line.slice(2), italics:true, color:'444444', font:'Times New Roman', size:24})],
+          indent: {left: convertInchesToTwip(0.5)},
+          spacing: {after:100, line:320}
+        }));
+      } else if (line.startsWith('---') || line.startsWith('===')) {
+        flushList();
+      } else {
+        flushList();
+        docParts.push(new Paragraph({
+          children: makeRuns(line),
+          spacing: {after:120, line:360},
+          alignment: AlignmentType.JUSTIFIED,
+          indent: {firstLine: convertInchesToTwip(0.5)}
+        }));
+      }
+    }
+    flushList();
+
+    const doc = new Document({
+      creator: 'SCHOLARIS AI Academic Writer',
+      title: docTitle,
+      description: 'Generated by SCHOLARIS',
+      styles: {
+        default: {
+          document: {
+            run: {font:'Times New Roman', size:24, color:'000000'},
+            paragraph: {spacing:{line:360}}
+          }
+        },
+        paragraphStyles: [
+          {id:'Heading1', name:'Heading 1',
+           basedOn:'Normal', next:'Normal',
+           run:{font:'Times New Roman', size:28, bold:true, color:'1a1a2e'},
+           paragraph:{spacing:{before:320, after:180}, alignment:AlignmentType.CENTER}},
+          {id:'Heading2', name:'Heading 2',
+           basedOn:'Normal', next:'Normal',
+           run:{font:'Times New Roman', size:26, bold:true, color:'16213e'},
+           paragraph:{spacing:{before:240, after:140}}},
+          {id:'Heading3', name:'Heading 3',
+           basedOn:'Normal', next:'Normal',
+           run:{font:'Times New Roman', size:24, bold:true, italics:true, color:'0f3460'},
+           paragraph:{spacing:{before:180, after:100}}},
+          {id:'Heading4', name:'Heading 4',
+           basedOn:'Normal', next:'Normal',
+           run:{font:'Times New Roman', size:24, bold:true},
+           paragraph:{spacing:{before:140, after:80}}}
+        ]
       },
-      paragraphStyles: [
-        { id: 'Heading1', name: 'Heading 1', run: { font: 'Times New Roman', size: 28, bold: true, color: '1a1a2e' }, paragraph: { spacing: { before: 320, after: 200 } } },
-        { id: 'Heading2', name: 'Heading 2', run: { font: 'Times New Roman', size: 26, bold: true, color: '16213e' }, paragraph: { spacing: { before: 240, after: 160 } } },
-        { id: 'Heading3', name: 'Heading 3', run: { font: 'Times New Roman', size: 24, bold: true, color: '0f3460' }, paragraph: { spacing: { before: 180, after: 120 } } },
-        { id: 'ListParagraph', name: 'List Paragraph', run: { font: 'Times New Roman', size: 24 } }
-      ]
-    },
-    sections: [{
-      properties: {
-        page: {
-          margin: { top: convertInchesToTwip(1.2), bottom: convertInchesToTwip(1.2), left: convertInchesToTwip(1.5), right: convertInchesToTwip(1.2) }
-        }
-      },
-      headers: {
-        default: new Header({
-          children: [new Paragraph({
+      sections: [{
+        properties: {
+          page: {
+            margin: {
+              top:    convertInchesToTwip(1.18),
+              bottom: convertInchesToTwip(1.18),
+              left:   convertInchesToTwip(1.38),
+              right:  convertInchesToTwip(1.18)
+            }
+          }
+        },
+        headers: {
+          default: new Header({
+            children: [new Paragraph({
+              children: [
+                new TextRun({text: 'SCHOLARIS Academic Writer  |  ', size:18, color:'888888', font:'Times New Roman'}),
+                new TextRun({text: docTitle.slice(0,55) + (docTitle.length>55 ? '...' : ''), size:18, color:'aaaaaa', font:'Times New Roman'})
+              ],
+              border: {bottom: {style: BorderStyle.SINGLE, size:4, color:'dddddd'}}
+            })]
+          })
+        },
+        footers: {
+          default: new Footer({
+            children: [new Paragraph({
+              children: [
+                new TextRun({text: author + '  |  ' + today + '  |  ' + wc.toLocaleString() + ' kata', size:18, color:'888888', font:'Times New Roman'})
+              ],
+              alignment: AlignmentType.CENTER,
+              border: {top: {style: BorderStyle.SINGLE, size:4, color:'dddddd'}}
+            })]
+          })
+        },
+        children: [
+          new Paragraph({text:'', spacing:{after:200}}),
+          new Paragraph({
+            children: [new TextRun({text: docTitle, bold:true, size:32, font:'Times New Roman', color:'1a1a2e'})],
+            heading: HeadingLevel.HEADING_1,
+            spacing: {before:0, after:240}
+          }),
+          new Paragraph({
             children: [
-              new TextRun({ text: 'SCHOLARIS — AI Academic Writer', size: 18, color: '888888', font: 'Times New Roman' }),
-              new TextRun({ text: '\t\t' + docTitle.slice(0, 50) + (docTitle.length > 50 ? '...' : ''), size: 18, color: 'aaaaaa', font: 'Times New Roman' })
-            ],
-            border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: 'dddddd' } }
-          })]
-        })
-      },
-      footers: {
-        default: new Footer({
-          children: [new Paragraph({
-            children: [
-              new TextRun({ text: 'Dihasilkan oleh SCHOLARIS  |  ' + today + '  |  ' + wc.toLocaleString() + ' kata  |  Halaman ', size: 18, color: '888888' }),
-              new PageNumber({ type: 'current', format: NumberFormat.DECIMAL })
+              new TextRun({text: author, bold:true, size:22, font:'Times New Roman', color:'444444'}),
+              new TextRun({text: '   ·   ', size:22, color:'cccccc'}),
+              new TextRun({text: today, size:22, font:'Times New Roman', color:'666666'}),
+              new TextRun({text: '   ·   ', size:22, color:'cccccc'}),
+              new TextRun({text: wc.toLocaleString() + ' kata', size:22, font:'Times New Roman', color:'666666'})
             ],
             alignment: AlignmentType.CENTER,
-            border: { top: { style: BorderStyle.SINGLE, size: 6, color: 'dddddd' } }
-          })]
-        })
-      },
-      children: [
-        // Cover info block
-        new Paragraph({ text: '', spacing: { after: 200 } }),
-        new Paragraph({
-          children: [new TextRun({ text: docTitle, bold: true, size: 32, font: 'Times New Roman', color: '1a1a2e' })],
-          heading: HeadingLevel.HEADING_1,
-          spacing: { before: 0, after: 280 }
-        }),
-        new Paragraph({
-          children: [
-            new TextRun({ text: author, bold: true, size: 22, font: 'Times New Roman', color: '444444' }),
-            new TextRun({ text: '  ·  ', size: 22, color: 'aaaaaa' }),
-            new TextRun({ text: today, size: 22, font: 'Times New Roman', color: '666666' }),
-            new TextRun({ text: '  ·  ', size: 22, color: 'aaaaaa' }),
-            new TextRun({ text: wc.toLocaleString() + ' kata', size: 22, color: '666666', font: 'Times New Roman' })
-          ],
-          spacing: { after: 400 }
-        }),
-        ...docParts
-      ]
-    }]
-  });
+            spacing: {after:400}
+          }),
+          new Paragraph({
+            children: [new TextRun({text:'', size:24})],
+            border: {bottom: {style: BorderStyle.SINGLE, size:6, color:'8b4513'}},
+            spacing: {after:300}
+          }),
+          ...docParts
+        ]
+      }]
+    });
 
-  const blob = await Packer.toBlob(doc);
+    const blob = await Packer.toBlob(doc);
+    const fname = docTitle.slice(0,60)
+      .replace(/[^\w\s\-_\u00C0-\u024F\u0600-\u06FF]/g,'')
+      .trim().replace(/\s+/g,'_') || 'scholaris';
+
+    const url = URL.createObjectURL(blob);
+    const a   = document.createElement('a');
+    a.href     = url;
+    a.download = fname + '.docx';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
+    toast('✅ File DOCX berhasil diunduh!', 4000);
+    saveToHistory('docx');
+
+  } catch(libErr) {
+    // ── Fallback: HTML→Word (works without any library) ────────────
+    console.warn('docx library error, using HTML-Word fallback:', libErr.message);
+    try {
+      _exportDOCXFallback(docTitle, author, today, wc);
+    } catch(fbErr) {
+      toast('❌ Export gagal: ' + fbErr.message);
+      console.error('Export fallback error:', fbErr);
+    }
+  }
+}
+
+// ── Fallback: HTML→Word export (no library, always works) ──────────
+function _exportDOCXFallback(docTitle, author, today, wc) {
+  const bodyHtml = marked.parse(lastOutput);
+  const wordHtml = '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">' +
+    '<html xmlns="http://www.w3.org/1999/xhtml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">' +
+    '<head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>' +
+    '<meta name="ProgId" content="Word.Document"/>' +
+    '<title>' + escHtml(docTitle) + '</title>' +
+    '<style>' +
+    '@page WordSection1{size:21.0cm 29.7cm;margin:3.0cm 2.54cm 2.54cm 3.0cm;}' +
+    'div.WordSection1{page:WordSection1;}' +
+    'body{font-family:"Times New Roman",serif;font-size:12pt;line-height:2.0;color:#000;}' +
+    'h1{font-size:14pt;font-weight:bold;text-align:center;margin:24pt 0 12pt;}' +
+    'h2{font-size:13pt;font-weight:bold;margin:18pt 0 8pt;}' +
+    'h3{font-size:12pt;font-weight:bold;font-style:italic;margin:14pt 0 6pt;}' +
+    'p{font-size:12pt;text-align:justify;text-indent:1.27cm;margin:0 0 6pt;}' +
+    'ul,ol{margin-left:1.5cm;font-size:12pt;}' +
+    'li{margin-bottom:4pt;}' +
+    'blockquote{border-left:3pt solid #8b4513;padding-left:14pt;margin:8pt 0 8pt 1cm;font-style:italic;color:#444;}' +
+    '.cover{text-align:center;border-bottom:2pt solid #8b4513;padding-bottom:14pt;margin-bottom:24pt;}' +
+    '</style></head><body><div class="WordSection1">' +
+    '<div class="cover">' +
+    '<h1 style="border:none;margin-bottom:6pt;">' + escHtml(docTitle) + '</h1>' +
+    '<p style="text-indent:0;text-align:center;font-size:10pt;color:#666;">' + escHtml(author) + ' &nbsp;|&nbsp; ' + today + ' &nbsp;|&nbsp; ' + (wc||0).toLocaleString() + ' kata</p>' +
+    '</div>' +
+    bodyHtml +
+    '</div></body></html>';
+
+  const blob = new Blob(['\ufeff' + wordHtml], {type:'application/msword;charset=utf-8'});
+  const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
-  a.href     = URL.createObjectURL(blob);
-  a.download = (docTitle.slice(0, 60).replace(/[^a-zA-Z0-9\s\-_\u00C0-\u024F]/g, '') || 'scholaris').trim().replace(/\s+/g, '_') + '.docx';
+  a.href     = url;
+  a.download = (docTitle.slice(0,60).replace(/[^\w\s\-_]/g,'').trim().replace(/\s+/g,'_') || 'scholaris') + '.doc';
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(a.href);
-  toast('✅ File DOCX berhasil diunduh!', 4000);
-
-  // Auto-save ke history setelah export
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
+  toast('✅ Dokumen Word berhasil diunduh! (format .doc)', 4000);
   saveToHistory('docx');
 }
 
