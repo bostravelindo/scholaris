@@ -1702,7 +1702,7 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
     </div>
     <div class="sidebar-footer">
       <div>Scholaris Engine</div>
-      <div class="version-badge" id="versionBadge" onclick="handleVersionClick()" style="cursor:pointer;" title="v9.1">v10.1 Smart and Integrity</div>
+      <div class="version-badge" id="versionBadge" onclick="handleVersionClick()" style="cursor:pointer;" title="v9.1">v10.1 Smart & Integrity</div>
     </div>
   </aside>
 
@@ -1972,8 +1972,8 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
             <textarea id="writeInstructions" rows="4" placeholder="Contoh: Fokus pada perspektif maqāṣid al-sharīʿah. Gunakan referensi Scopus Q1-Q2 terbitan 2020-2025. Analisis menggunakan pendekatan kualitatif fenomenologi..."></textarea>
           </div>
           <div style="margin-bottom:14px;">
-            <label>Kata Kunci untuk Pencarian Referensi CrossRef</label>
-            <input type="text" id="writeRefKeywords" placeholder="Pisahkan dengan koma: Islamic economics, maqasid, digital finance">
+            <label>Kata Kunci untuk Pencarian Referensi Hexa-Source (6 Database)</label>
+            <input type="text" id="writeRefKeywords" placeholder="Pisahkan dengan koma: Islamic economics, maqasid, digital finance (akan dicari di 6 database)">
           </div>
           <div class="row" style="margin-bottom:16px;">
             <div>
@@ -2002,7 +2002,7 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
           </button>
           <button class="btn btn-secondary" style="margin-left:8px;" id="btnGenerateRefs" onclick="generateWithRefs()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            Generate + Cari Referensi (6 Sumber)
+            Generate + Cari Referensi (Hexa-Source: 6 Database)
           </button>
         </div>
 
@@ -3205,7 +3205,7 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
       </div>
       <div class="auth-feat-item">
         <div class="auth-feat-icon">🔍</div>
-        <div class="auth-feat-text"><h5>4-Source Reference Engine</h5><p>CrossRef + DOAJ + Europe PMC + OpenAlex</p></div>
+        <div class="auth-feat-text"><h5>Hexa-Source Reference Engine</h5><p>CrossRef + DOAJ + Europe PMC + OpenAlex + Scopus + Semantic Scholar</p></div>
       </div>
       <div class="auth-feat-item">
         <div class="auth-feat-icon">✍️</div>
@@ -3911,7 +3911,7 @@ function extractKeywords_(title, instructions, lang) {
 }
 
 // ================================================================
-// QUAD-SOURCE ENGINE v4 — TRIPLE-LAYER RESILIENCE
+// HEXA-SOURCE ENGINE v5 — 6-DATABASE TRIPLE-LAYER RESILIENCE
 // ================================================================
 // Masalah yang diselesaikan:
 //   1. GAS Code.gs belum diupdate → Layer 2/3 otomatis aktif
@@ -3972,7 +3972,8 @@ function parseDOAJItems_(items) {
       cited_by: 0,
       source  : 'DOAJ',
       isOA    : true,
-      oaUrl   : doi ? 'https://doi.org/' + doi : (link && link.url) || ''
+      oaUrl   : doi ? 'https://doi.org/' + doi : (link && link.url) || '',
+      isScopus: false
     };
   }).filter(r => r.title && r.title !== 'Untitled');
 }
@@ -4097,7 +4098,8 @@ function parseEuropePMCItems_(items) {
       source   : 'Europe PMC',
       isOA     : p.isOpenAccess === 'Y',
       oaUrl    : p.isOpenAccess === 'Y' && p.source && p.id
-                 ? 'https://europepmc.org/article/' + p.source + '/' + p.id : ''
+                 ? 'https://europepmc.org/article/' + p.source + '/' + p.id : '',
+      isScopus : false
     };
   });
 }
@@ -4352,7 +4354,8 @@ async function searchSemanticScholarV2_(query, limit) {
           cited_by: p.citationCount || 0,
           source  : 'Semantic Scholar',
           isOA    : p.isOpenAccess === true,
-          oaUrl   : ''
+          oaUrl   : '',
+          isScopus: false
         };
       });
   } catch (err) {
@@ -4362,7 +4365,7 @@ async function searchSemanticScholarV2_(query, limit) {
 }
 
 /**
- * FASE 1 UTAMA: Auto-harvest referensi dari 3 sumber paralel.
+ * FASE 1 UTAMA: Auto-harvest referensi dari 6 sumber paralel (Hexa-Source).
  * CrossRef + Semantic Scholar + OpenAlex → pool terverifikasi.
  */
 async function autoHarvestRefs_(title, instructions, lang, yearFrom, yearTo, targetCount) {
@@ -4386,32 +4389,32 @@ async function autoHarvestRefs_(title, instructions, lang, yearFrom, yearTo, tar
     );
   });
 
-  // 2. DOAJ — open access, jurnal Islam/Indonesia
-  queries.slice(0, 2).forEach(function(q) {
+  // 2. DOAJ — SEMUA query (open access, jurnal Islam/Indonesia)
+  queries.forEach(function(q) {
     allPromises.push(searchDOAJ_(q, Math.ceil(perQuery / 2) + 2).catch(function() { return []; }));
   });
 
-  // 3. Europe PMC — multidisiplin, abstrak lengkap
-  queries.slice(0, 2).forEach(function(q) {
-    allPromises.push(searchEuropePMC_(q, Math.ceil(perQuery / 2)).catch(function() { return []; }));
+  // 3. Europe PMC — SEMUA query (multidisiplin, abstrak lengkap)
+  queries.forEach(function(q) {
+    allPromises.push(searchEuropePMC_(q, Math.ceil(perQuery / 2) + 1).catch(function() { return []; }));
   });
 
-  // 4. OpenAlex — coverage luas + OA detection
-  queries.slice(0, 2).forEach(function(q) {
-    allPromises.push(searchOpenAlexFull_(q, Math.ceil(perQuery / 2), yearFrom, yearTo, false).catch(function() { return []; })); // BUG-2 FIX: use full version with year filter
+  // 4. OpenAlex — SEMUA query (coverage luas + OA detection + year filter)
+  queries.forEach(function(q) {
+    allPromises.push(searchOpenAlexFull_(q, Math.ceil(perQuery / 2) + 1, yearFrom, yearTo, false).catch(function() { return []; }));
   });
 
-  // 5. OpenAlex Scopus — filter is_in_scopus:true, jurnal Q1/Q2 terindeks
-  queries.slice(0, 2).forEach(function(q) {
+  // 5. OpenAlex Scopus — SEMUA query (is_in_scopus:true → Q1/Q2 terindeks)
+  queries.forEach(function(q) {
     allPromises.push(
       searchOpenAlexScopus_(q, Math.ceil(perQuery / 2) + 3, yearFrom, yearTo).catch(function() { return []; })
     );
   });
 
-  // 6. Semantic Scholar — 200 juta paper, citation graph
-  queries.slice(0, 2).forEach(function(q) {
+  // 6. Semantic Scholar — SEMUA query (200 juta paper, citation graph AI-enhanced)
+  queries.forEach(function(q) {
     allPromises.push(
-      searchSemanticScholarV2_(q, Math.ceil(perQuery / 3)).catch(function() { return []; })
+      searchSemanticScholarV2_(q, Math.ceil(perQuery / 3) + 2).catch(function() { return []; })
     );
   });
 
@@ -4478,7 +4481,7 @@ function buildLockedRefContext_(refs, citeStyle, lang) {
   return `
 ════════════════════════════════════════════
 POOL REFERENSI TERVERIFIKASI (${refs.length} referensi nyata)
-Sumber: CrossRef + DOAJ + Europe PMC + OpenAlex + OpenAlex-Scopus + Semantic Scholar
+Sumber: CrossRef | DOAJ | Europe PMC | OpenAlex | 🟠OpenAlex-Scopus | Semantic Scholar
 Scopus-Indexed: ${scopusCount} referensi | Semantic Scholar: ${s2Count} referensi
 Format sitasi: ${citeStyle.toUpperCase()}
 ════════════════════════════════════════════
@@ -4718,9 +4721,9 @@ async function autoRefAndGenerate_(mode, model, lang, cite, temp, title, instruc
   const yearFrom = document.getElementById('refYearFrom') ? document.getElementById('refYearFrom').value : '2019';
   const yearTo   = document.getElementById('refYearTo')   ? document.getElementById('refYearTo').value   : '2026';
   
-  // Auto-harvest dari 3 sumber
-  setStatus('🔍 Fase 1: Mengambil referensi dari CrossRef + DOAJ + Europe PMC + OpenAlex...');
-  const refs = await autoHarvestRefs_(title, instructions, lang, yearFrom, yearTo, 20);
+  // Auto-harvest dari 6 sumber (Hexa-Source)
+  setStatus('🔍 Fase 1: Hexa-Source Harvest — CrossRef + DOAJ + Europe PMC + OpenAlex + 🟠Scopus + Semantic Scholar...');
+  const refs = await autoHarvestRefs_(title, instructions, lang, yearFrom, yearTo, 30);
   
   validatedRefPool = refs;  // Simpan ke global pool
   
@@ -5026,7 +5029,8 @@ async function callCrossRefDirect(payload) {
     volume: item.volume || '', issue: item.issue || '', pages: item.page || '',
     publisher: item.publisher || '', type: item.type || '',
     url: item.URL || ('https://doi.org/' + (item.DOI || '')),
-    abstract: item.abstract || '', cited_by: item['is-referenced-by-count'] || 0, score: item.score || 0
+    abstract: item.abstract || '', cited_by: item['is-referenced-by-count'] || 0, score: item.score || 0,
+    source: 'CrossRef', isScopus: false, isOA: false
   }));
   return { success: true, total: data.message['total-results'], count: references.length, references };
 }
@@ -5265,7 +5269,7 @@ async function runSegmentedGeneration(mode, model, lang, citeStyle, temp, title,
     // Build context-aware prompt
     let userPrompt = `JUDUL/TOPIK PENELITIAN: ${title}\n`;
     if (instructions) userPrompt += `KONTEKS & INSTRUKSI KHUSUS: ${instructions}\n`;
-    if (refContext) userPrompt += `\nREFERENSI QUAD-SOURCE TERVERIFIKASI (CrossRef+DOAJ+EuropePMC+OpenAlex):\n${refContext}\n`;
+    if (refContext) userPrompt += `\nREFERENSI HEXA-SOURCE TERVERIFIKASI (CrossRef+DOAJ+EuropePMC+OpenAlex+🟠Scopus+SemanticScholar):\n${refContext}\n`;
 
     // Provide accumulated context for coherence (only for non-first segments)
     if (accumulatedContext) {
@@ -5505,7 +5509,7 @@ async function runDualAISegmented(mode, lang, citeStyle, temp, title, instructio
     const segInstruction = getSegmentInstruction(seg.id, mode, lang, citeStyle, i, segments.length);
     let userPrompt = `JUDUL/TOPIK PENELITIAN: ${title}\n`;
     if (instructions) userPrompt += `KONTEKS & INSTRUKSI KHUSUS: ${instructions}\n`;
-    if (refContext) userPrompt += `\nREFERENSI QUAD-SOURCE TERVERIFIKASI (CrossRef+DOAJ+EuropePMC+OpenAlex):\n${refContext}\n`;
+    if (refContext) userPrompt += `\nREFERENSI HEXA-SOURCE TERVERIFIKASI (CrossRef+DOAJ+EuropePMC+OpenAlex+🟠Scopus+SemanticScholar):\n${refContext}\n`;
     if (accumulatedContext) {
       const ctx = accumulatedContext.length > 3000 ? accumulatedContext.slice(-3000) + '\n[...previous sections...]' : accumulatedContext;
       userPrompt += `\nKONTEKS DARI BAGIAN SEBELUMNYA:\n${ctx}\n`;
@@ -5664,7 +5668,10 @@ async function generateWithRefs() {
     const kwList = keywords.split(',').map(k => k.trim()).filter(Boolean);
     const perKW  = Math.ceil(refCount / kwList.length) + 4;
 
+    // ── Paralel: semua keyword ke semua 6 sumber ─────────────────
     const allPromises = [];
+
+    // 1. CrossRef — semua keyword (sumber primer DOI terverifikasi)
     kwList.forEach(kw => {
       allPromises.push(
         callCrossRefDirect({ query:kw, rows:perKW, sort:'relevance',
@@ -5673,12 +5680,30 @@ async function generateWithRefs() {
           .catch(() => [])
       );
     });
-    kwList.slice(0, 2).forEach(kw => {
-      allPromises.push(searchDOAJ_(kw, Math.ceil(perKW/2)).catch(() => []));
+
+    // 2. DOAJ — semua keyword (open access, jurnal Islam/Indonesia)
+    kwList.forEach(kw => {
+      allPromises.push(searchDOAJ_(kw, Math.ceil(perKW/2)+2).catch(() => []));
+    });
+
+    // 3. Europe PMC — semua keyword (multidisiplin, abstrak lengkap)
+    kwList.forEach(kw => {
       allPromises.push(searchEuropePMC_(kw, Math.ceil(perKW/2)).catch(() => []));
+    });
+
+    // 4. OpenAlex — semua keyword (coverage luas + OA detection + year filter)
+    kwList.forEach(kw => {
       allPromises.push(searchOpenAlexFull_(kw, Math.ceil(perKW/2), yearFrom, yearTo, false).catch(() => []));
+    });
+
+    // 5. OpenAlex Scopus-indexed — semua keyword (filter is_in_scopus:true → Q1/Q2)
+    kwList.forEach(kw => {
       allPromises.push(searchOpenAlexScopus_(kw, Math.ceil(perKW/2)+3, yearFrom, yearTo).catch(() => []));
-      allPromises.push(searchSemanticScholarV2_(kw, Math.ceil(perKW/3)).catch(() => []));
+    });
+
+    // 6. Semantic Scholar — semua keyword (200 juta paper, citation graph)
+    kwList.forEach(kw => {
+      allPromises.push(searchSemanticScholarV2_(kw, Math.ceil(perKW/3)+2).catch(() => []));
     });
 
     const settled = await Promise.allSettled(allPromises);
@@ -5693,7 +5718,13 @@ async function generateWithRefs() {
       if (seen.has(k)) return false;
       seen.add(k); return true;
     });
-    allRefs.sort((a,b) => (b.cited_by||0)-(a.cited_by||0));
+    // Urutkan: 🟠 Scopus-indexed DULU, kemudian by citation count
+    allRefs.sort((a, b) => {
+      const scA = a.isScopus ? 1 : 0;
+      const scB = b.isScopus ? 1 : 0;
+      if (scB !== scA) return scB - scA;           // Scopus dulu
+      return (b.cited_by||0) - (a.cited_by||0);   // lalu sitasi terbanyak
+    });
     allRefs = allRefs.slice(0, Math.max(refCount, 20));
 
     validatedRefPool = allRefs;
@@ -5764,7 +5795,7 @@ async function sendMultiTurn() {
   renderChat();
   setLoading(true);
   try {
-    // Sisipkan pool referensi quad-source jika tersedia dari sesi generate sebelumnya
+    // Sisipkan pool referensi hexa-source jika tersedia dari sesi generate sebelumnya
     const mtRefCtx = validatedRefPool.length > 0
       ? buildLockedRefContext_(validatedRefPool, 'apa7', lang)
       : '';
@@ -6130,7 +6161,8 @@ async function searchOpenAlexFull_(query, limit, yearFrom, yearTo, oaOnly) {
         isOA     : w.open_access && w.open_access.is_oa === true,
         oaUrl    : (w.open_access && w.open_access.oa_url) || '',
         publisher: (w.primary_location && w.primary_location.source && w.primary_location.source.host_organization_name) || '',
-        type     : w.type || ''
+        type     : w.type || '',
+        isScopus : false
       };
     });
   } catch (_) { return []; }
@@ -6838,17 +6870,39 @@ function displayOutput(md, areaId, cardId) {
 function displayRefs(refs) {
   document.getElementById('refsCard').style.display = '';
   const el = document.getElementById('refsArea');
-  el.innerHTML = refs.map((r, i) => {
-    const auth = r.authors.map(a => a.full).join(', ') || 'Unknown';
-    return `<div class="ref-card">
-      <div class="ref-card-title">[${i+1}] ${escHtml(r.title)}</div>
-      <div class="ref-card-meta">
-        ${escHtml(auth)} (${r.year}) — <em>${escHtml(r.journal)}</em>
-        ${r.volume ? ' Vol.'+r.volume : ''}${r.pages ? ', pp.'+r.pages : ''}<br>
-        <span class="ref-doi">DOI: <a href="https://doi.org/${r.doi}" target="_blank">${r.doi}</a></span>
-        &nbsp;|&nbsp; Cited by: ${r.cited_by}
-      </div>
-    </div>`;
+  const scopusCount = refs.filter(r => r.isScopus).length;
+  const s2Count     = refs.filter(r => r.source === 'Semantic Scholar').length;
+  // Header summary
+  const headerHtml = `<div style="padding:8px 12px;background:linear-gradient(135deg,#0d1b2a,#1b2d45);
+    border-radius:6px;margin-bottom:10px;font-size:.75rem;color:#7a99c8;display:flex;gap:12px;flex-wrap:wrap;">
+    <span>📚 <strong style="color:#e8f0fe">${refs.length}</strong> referensi hexa-source</span>
+    ${scopusCount ? '<span>🟠 <strong style="color:#f97316">' + scopusCount + '</strong> Scopus-indexed Q1/Q2</span>' : ''}
+    ${s2Count ? '<span>⚫ <strong style="color:#a78bfa">' + s2Count + '</strong> Semantic Scholar</span>' : ''}
+    <span style="margin-left:auto;color:#4a6a8a;font-size:.68rem;">Scopus-indexed = prioritas sitasi tertinggi</span>
+  </div>`;
+  el.innerHTML = headerHtml + refs.map((r, i) => {
+    const auth = (r.authors || []).map(a => a.full || ((a.given||'')+' '+(a.family||'')).trim()).filter(Boolean).join(', ') || 'Unknown';
+    const scopusBadge = r.isScopus
+      ? '<span style="background:rgba(249,115,22,.15);color:#c2410c;border:1px solid rgba(249,115,22,.35);font-size:.62rem;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:6px;">🟠 Scopus Q1/Q2</span>'
+      : '';
+    const s2Badge = r.source === 'Semantic Scholar'
+      ? '<span style="background:rgba(139,92,246,.12);color:#6d28d9;border:1px solid rgba(139,92,246,.25);font-size:.62rem;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:4px;">Semantic Scholar</span>'
+      : '';
+    const srcBadge = r.source && r.source !== 'OpenAlex Scopus'
+      ? '<span style="font-size:.62rem;color:var(--text3);margin-left:4px;">[' + r.source + ']</span>'
+      : '';
+    const oaBadge = r.isOA
+      ? '<span style="font-size:.62rem;color:#d97706;margin-left:4px;">🔓 OA</span>' : '';
+    return '<div class="ref-card" style="border-left:' + (r.isScopus ? '3px solid #f97316' : '1px solid var(--border)') + '">' +
+      '<div class="ref-card-title">[' + (i+1) + '] ' + escHtml(r.title) + scopusBadge + s2Badge + '</div>' +
+      '<div class="ref-card-meta">' +
+        escHtml(auth) + ' (' + (r.year||'n.d.') + ') — <em>' + escHtml(r.journal||'') + '</em>' +
+        (r.volume ? ' Vol.'+r.volume : '') + (r.pages ? ', pp.'+r.pages : '') + '<br>' +
+        '<span class="ref-doi">DOI: <a href="https://doi.org/' + r.doi + '" target="_blank">' + r.doi + '</a></span>' +
+        srcBadge + oaBadge +
+        ' &nbsp;|&nbsp; Cited by: <strong>' + (r.cited_by||0) + '</strong>' +
+      '</div>' +
+    '</div>';
   }).join('');
 }
 
@@ -6914,580 +6968,236 @@ function exportBiblioDOCX() {
   const text = '# Daftar Pustaka\n\n' + bibliography.map(r => formatAPA7(r)).join('\n\n');
   generateDocx(text, 'Scholaris_Bibliography');
 }
+
+// ================================================================
+// SCHOLARIS DOCX EXPORT ENGINE v3 — Pure HTML-Word
+// Menghasilkan file .doc yang dibuka Word, LibreOffice, WPS Office
+// Tidak bergantung library eksternal — 100% reliable
+// ================================================================
+
+// ── Sanitize HTML agar Word tidak reject ────────────────────────
+function _sanitizeForWord(html) {
+  return html
+    // Hapus script & style blocks
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    // Hapus atribut berbahaya
+    .replace(/\s*on\w+="[^"]*"/gi, '')
+    .replace(/\s*on\w+='[^']*'/gi, '')
+    // Fix unclosed br/img/hr tags ke XHTML form
+    .replace(/<br\s*\/?>/gi, '<br/>')
+    .replace(/<hr\s*\/?>/gi, '<hr/>')
+    .replace(/<img([^>]*?)(?<!\/)\s*>/gi, '<img$1/>')
+    // Hapus class selectors yang tidak relevan untuk Word
+    .replace(/\s*class="[^"]*"/gi, '')
+    // Pastikan tidak ada null bytes
+    .replace(/\0/g, '')
+    // Trim
+    .trim();
+}
+
+// ── Build Word HTML document string ────────────────────────────
+function _buildWordHTML(title, author, today, bodyHtml) {
+  var safeBody  = _sanitizeForWord(bodyHtml);
+  var safeTitle = (title || 'Dokumen SCHOLARIS').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  var safeAuthor = (author || 'SCHOLARIS User').replace(/&/g,'&amp;');
+
+  return (
+    '<html xmlns:o="urn:schemas-microsoft-com:office:office"' +
+    ' xmlns:w="urn:schemas-microsoft-com:office:word"' +
+    ' xmlns="http://www.w3.org/TR/REC-html40">' +
+    '<head>' +
+    '<meta charset="UTF-8">' +
+    '<meta name="ProgId" content="Word.Document">' +
+    '<meta name="Generator" content="Microsoft Word 15">' +
+    '<title>' + safeTitle + '</title>' +
+    '<style>' +
+      /* Page setup — A4, margin 3cm kiri (binding), 2.54cm sisanya */
+      '@page WordSection1{' +
+        'size:21.0cm 29.7cm;' +
+        'margin:2.54cm 2.54cm 2.54cm 3.0cm;' +
+        'mso-header-margin:1.0cm;' +
+        'mso-footer-margin:1.0cm;' +
+      '}' +
+      'div.WordSection1{page:WordSection1;}' +
+      /* Body */
+      'body{' +
+        'font-family:"Times New Roman",Times,serif;' +
+        'font-size:12.0pt;' +
+        'line-height:2.0;' +  /* double-space */
+        'color:#000000;' +
+        'margin:0;padding:0;' +
+        'mso-fareast-language:ID;' +
+      '}' +
+      /* Headings */
+      'h1{font-size:14.0pt;font-weight:bold;text-align:center;' +
+        'margin:24.0pt 0 12.0pt 0;mso-outline-level:1;' +
+        'font-family:"Times New Roman",Times,serif;}' +
+      'h2{font-size:13.0pt;font-weight:bold;text-align:left;' +
+        'margin:18.0pt 0 6.0pt 0;mso-outline-level:2;' +
+        'font-family:"Times New Roman",Times,serif;}' +
+      'h3{font-size:12.0pt;font-weight:bold;font-style:italic;' +
+        'margin:14.0pt 0 4.0pt 0;mso-outline-level:3;' +
+        'font-family:"Times New Roman",Times,serif;}' +
+      'h4{font-size:12.0pt;font-weight:bold;' +
+        'margin:12.0pt 0 4.0pt 0;mso-outline-level:4;' +
+        'font-family:"Times New Roman",Times,serif;}' +
+      /* Paragraphs */
+      'p{' +
+        'font-family:"Times New Roman",Times,serif;' +
+        'font-size:12.0pt;' +
+        'text-align:justify;' +
+        'text-indent:1.27cm;' +  /* indent paragraf pertama 1.27cm */
+        'margin:0 0 0 0;' +
+        'mso-line-height-rule:exactly;' +
+        'line-height:200%;' +
+      '}' +
+      /* Lists */
+      'ul,ol{' +
+        'margin:6.0pt 0 6.0pt 1.5cm;' +
+        'font-family:"Times New Roman",Times,serif;' +
+        'font-size:12.0pt;' +
+        'line-height:180%;' +
+      '}' +
+      'li{margin:0 0 4.0pt 0;}' +
+      /* Blockquote */
+      'blockquote{' +
+        'margin:8.0pt 1.27cm 8.0pt 1.5cm;' +
+        'padding-left:12.0pt;' +
+        'border-left:3.0pt solid #8b4513;' +
+        'font-style:italic;' +
+        'color:#444444;' +
+      '}' +
+      /* Table */
+      'table{border-collapse:collapse;width:100%;margin:8.0pt 0;}' +
+      'td,th{border:1.0pt solid #999999;padding:4.0pt 6.0pt;' +
+        'font-family:"Times New Roman",Times,serif;font-size:11.0pt;}' +
+      'th{font-weight:bold;background-color:#f0ede8;}' +
+      /* Code */
+      'pre,code{' +
+        'font-family:"Courier New",Courier,monospace;' +
+        'font-size:10.0pt;' +
+        'background:#f8f8f8;' +
+      '}' +
+      'pre{padding:6.0pt 8.0pt;margin:6.0pt 0;white-space:pre-wrap;word-break:break-all;}' +
+      /* Horizontal rule */
+      'hr{border:none;border-top:1.0pt solid #cccccc;margin:12.0pt 0;}' +
+      /* Cover page */
+      '.cover{text-align:center;border-bottom:2.0pt solid #8b4513;' +
+        'padding-bottom:12.0pt;margin-bottom:24.0pt;}' +
+      '.cover h1{font-size:16.0pt;margin:0 0 8.0pt 0;color:#1a1a2e;}' +
+      '.cover-meta{font-size:10.0pt;color:#666666;' +
+        'font-family:"Times New Roman",Times,serif;' +
+        'margin-top:6.0pt;text-indent:0;}' +
+    '</style>' +
+    '</head>' +
+    '<body>' +
+    '<div class="WordSection1">' +
+    '<div class="cover">' +
+    '<h1>' + safeTitle + '</h1>' +
+    '<p class="cover-meta">' + safeAuthor + ' &nbsp;&bull;&nbsp; ' + today + '</p>' +
+    '</div>' +
+    safeBody +
+    '</div>' +
+    '</body>' +
+    '</html>'
+  );
+}
+
+// ── Download helper ─────────────────────────────────────────────
+function _downloadWordFile(htmlContent, filename) {
+  // BOM + HTML content
+  var bom    = '\uFEFF';
+  var blob   = new Blob([bom + htmlContent], {
+    type: 'application/msword;charset=utf-8'
+  });
+  var url = URL.createObjectURL(blob);
+  var a   = document.createElement('a');
+  a.href  = url;
+  a.download = (filename || 'scholaris')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, '_')
+    .slice(0, 100) + '.doc';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function() {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 2500);
+}
+
+// ── generateDocx: untuk History, MultiTurn, Bibliography, JC ────
 function generateDocx(markdown, filename) {
-  if (!markdown || !markdown.trim()) { toast('Tidak ada konten untuk diunduh'); return; }
+  if (!markdown || !markdown.trim()) {
+    toast('Tidak ada konten untuk diunduh');
+    return;
+  }
   try {
-    // Bersihkan markdown dari HTML tags yang mungkin ada
-    const cleanMd = markdown.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ');
-    const bodyHtml = marked.parse(markdown);
-    const today = new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
-
-    // Template HTML yang kompatibel 100% dengan Microsoft Word & LibreOffice
-    const wordDoc = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-'<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">' +
-'<html xmlns="http://www.w3.org/1999/xhtml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns:m="http://schemas.microsoft.com/office/2004/12/omml">' +
-'<head>' +
-'<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>' +
-'<meta name="ProgId" content="Word.Document"/>' +
-'<meta name="Generator" content="Microsoft Word 15"/>' +
-'<meta name="Originator" content="Microsoft Word 15"/>' +
-'<title>' + filename + '</title>' +
-'<style>' +
-'@page WordSection1{size:21.0cm 29.7cm;margin:2.54cm 3.0cm 2.54cm 3.0cm;mso-header-margin:1.25cm;mso-footer-margin:1.25cm;mso-page-numbers:1;}' +
-'div.WordSection1{page:WordSection1;}' +
-'body{font-family:"Times New Roman",Times,serif;font-size:12.0pt;line-height:200%;color:black;margin:0;padding:0;}' +
-'h1{font-family:"Times New Roman",Times,serif;font-size:14.0pt;font-weight:bold;text-align:center;line-height:200%;margin-top:24pt;margin-bottom:12pt;color:#1a1a2e;mso-outline-level:1;}' +
-'h2{font-family:"Times New Roman",Times,serif;font-size:13.0pt;font-weight:bold;text-align:left;line-height:200%;margin-top:18pt;margin-bottom:8pt;color:#16213e;mso-outline-level:2;}' +
-'h3{font-family:"Times New Roman",Times,serif;font-size:12.0pt;font-weight:bold;font-style:italic;text-align:left;line-height:200%;margin-top:14pt;margin-bottom:6pt;color:#0f3460;mso-outline-level:3;}' +
-'h4{font-family:"Times New Roman",Times,serif;font-size:12.0pt;font-weight:bold;line-height:200%;margin-top:12pt;margin-bottom:4pt;mso-outline-level:4;}' +
-'p{font-family:"Times New Roman",Times,serif;font-size:12.0pt;line-height:200%;text-align:justify;text-indent:1.27cm;margin-top:0;margin-bottom:6pt;}' +
-'p.no-indent{text-indent:0;}' +
-'ul,ol{margin-left:1.5cm;font-size:12.0pt;line-height:180%;}' +
-'li{margin-bottom:4pt;font-family:"Times New Roman",Times,serif;font-size:12.0pt;}' +
-'blockquote{border-left:3pt solid #8b4513;padding-left:14pt;margin-left:1.27cm;margin-right:1.27cm;font-style:italic;color:#444444;line-height:180%;}' +
-'table{border-collapse:collapse;width:100%;margin-bottom:12pt;}' +
-'td,th{border:1pt solid #999999;padding:6pt 8pt;font-family:"Times New Roman",Times,serif;font-size:11.0pt;}' +
-'th{background-color:#f0ede8;font-weight:bold;}' +
-'code,pre{font-family:"Courier New",Courier,monospace;font-size:10.0pt;background:#f5f5f5;padding:2pt 4pt;}' +
-'hr{border:none;border-top:1pt solid #cccccc;margin:14pt 0;}' +
-'a{color:#1565c0;}' +
-'.cover{text-align:center;margin-bottom:24pt;padding-bottom:14pt;border-bottom:2pt solid #8b4513;}' +
-'.cover-title{font-size:16.0pt;font-weight:bold;color:#1a1a2e;margin-bottom:8pt;}' +
-'.cover-meta{font-size:10.0pt;color:#666666;margin-top:6pt;}' +
-'</style>' +
-'</head>' +
-'<body>' +
-'<div class="WordSection1">' +
-'<div class="cover">' +
-'<div class="cover-title">' + filename.replace(/_/g,' ') + '</div>' +
-'<div class="cover-meta">Dihasilkan oleh SCHOLARIS AI Academic Writer &nbsp;|&nbsp; ' + today + '</div>' +
-'</div>' +
-bodyHtml +
-'</div>' +
-'</body>' +
-'</html>';
-
-    const blob = new Blob(['\ufeff' + wordDoc], {type: 'application/msword;charset=utf-8'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = (filename || 'scholaris').replace(/[\\\\/:*?"<>|]/g,'_') + '.doc';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
+    var bodyHtml = (typeof marked !== 'undefined' && marked.parse)
+      ? marked.parse(markdown)
+      : '<p>' + markdown.replace(/\n\n/g,'</p><p>').replace(/\n/g,'<br>') + '</p>';
+    var today   = new Date().toLocaleDateString('id-ID', {
+      day: '2-digit', month: 'long', year: 'numeric'
+    });
+    var author  = (function() {
+      var el = document.getElementById('mbName');
+      return (el && el.textContent && el.textContent.trim() !== '—')
+        ? el.textContent.trim() : 'SCHOLARIS User';
+    })();
+    var html = _buildWordHTML(filename, author, today, bodyHtml);
+    _downloadWordFile(html, filename);
     toast('✅ Dokumen Word berhasil diunduh!');
   } catch(e) {
-    toast('❌ Error export Word: ' + e.message);
+    toast('❌ Export gagal: ' + e.message);
     console.error('generateDocx error:', e);
   }
 }
 
-// exportPDF: see full version below
-function exportReviewPDF() { exportAreaToPDF('reviewOutputArea', 'Scholaris_Review'); }
-function exportAreaToPDF(areaId, filename) {
-  const el = document.getElementById(areaId);
-  if (!el || !el.innerHTML.trim()) { toast('Tidak ada konten untuk diunduh'); return; }
-
-  const tanggal = new Date().toLocaleDateString('id-ID', { day:'2-digit', month:'long', year:'numeric' });
-  const judul   = filename.replace(/_/g, ' ');
-
-  // Buka jendela print khusus — bekerja di semua browser tanpa library
-  const printWin = window.open('', '_blank', 'width=900,height=700');
-  if (!printWin) {
-    toast('❌ Pop-up diblokir browser. Izinkan pop-up untuk situs ini lalu coba lagi.');
-    return;
-  }
-
-  printWin.document.write(`<!DOCTYPE html>
-<html lang="id">
-<head>
-  <meta charset="UTF-8">
-  <title>${judul}</title>
-  <style>
-    /* Reset & base */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html { font-size: 12pt; }
-    body {
-      font-family: 'Times New Roman', Times, serif;
-      font-size: 12pt;
-      line-height: 2.0;
-      color: #000;
-      background: #fff;
-      padding: 0;
-    }
-
-    /* Print layout */
-    @page {
-      size: A4 portrait;
-      margin: 2.5cm 2.5cm 2.5cm 3cm;
-      @top-center {
-        content: "SCHOLARIS Academic Writer Engine";
-        font-size: 8pt;
-        color: #888;
-      }
-      @bottom-center {
-        content: "Halaman " counter(page) " dari " counter(pages);
-        font-size: 8pt;
-        color: #888;
-      }
-    }
-
-    /* Header halaman */
-    .doc-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      border-bottom: 1px solid #ccc;
-      padding-bottom: 6pt;
-      margin-bottom: 20pt;
-      font-size: 8pt;
-      color: #888;
-    }
-    .doc-header .brand { font-weight: 600; letter-spacing: .5px; }
-
-    /* Typography */
-    h1 {
-      font-family: 'Times New Roman', Times, serif;
-      font-size: 14pt;
-      font-weight: bold;
-      text-align: center;
-      margin: 18pt 0 12pt;
-      line-height: 1.4;
-    }
-    h2 {
-      font-family: 'Times New Roman', Times, serif;
-      font-size: 12pt;
-      font-weight: bold;
-      margin: 18pt 0 6pt;
-      line-height: 1.4;
-      page-break-after: avoid;
-    }
-    h3 {
-      font-family: 'Times New Roman', Times, serif;
-      font-size: 12pt;
-      font-weight: bold;
-      font-style: italic;
-      margin: 12pt 0 6pt;
-      page-break-after: avoid;
-    }
-    p {
-      text-align: justify;
-      text-indent: 1.27cm;
-      margin-bottom: 0;
-      orphans: 3;
-      widows: 3;
-    }
-    ul, ol {
-      margin: 6pt 0 6pt 1.5cm;
-      padding-left: 0.5cm;
-    }
-    li { margin-bottom: 3pt; text-align: justify; }
-    blockquote {
-      margin: 6pt 0 6pt 1.27cm;
-      font-size: 11pt;
-      border-left: 2pt solid #999;
-      padding-left: 10pt;
-    }
-    strong { font-weight: bold; }
-    em { font-style: italic; }
-    code {
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 10pt;
-      background: #f5f5f5;
-      padding: 1px 4px;
-    }
-    pre {
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 10pt;
-      background: #f5f5f5;
-      padding: 8pt;
-      margin: 8pt 0;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 10pt 0;
-      font-size: 11pt;
-    }
-    th { background: #f0f0f0; font-weight: bold; border: 1px solid #999; padding: 4pt 8pt; }
-    td { border: 1px solid #ccc; padding: 4pt 8pt; }
-    hr { border: none; border-top: 1px solid #ccc; margin: 12pt 0; }
-    a { color: #1a5276; text-decoration: none; }
-
-    /* No-print elements */
-    .no-print { display: none !important; }
-
-    /* Footer */
-    .doc-footer {
-      margin-top: 30pt;
-      border-top: 1px solid #ccc;
-      padding-top: 6pt;
-      font-size: 8pt;
-      color: #888;
-      text-align: center;
-    }
-
-    /* Print overrides */
-    @media print {
-      body { padding: 0; }
-      .doc-header, .doc-footer { display: block; }
-      .print-btn { display: none; }
-    }
-
-    /* Screen preview */
-    @media screen {
-      body { max-width: 21cm; margin: 0 auto; padding: 2cm; }
-      .print-btn {
-        position: fixed; top: 16px; right: 16px;
-        background: #8b4513; color: #fff; border: none;
-        padding: 10px 22px; border-radius: 6px;
-        font-size: 14px; font-weight: 600; cursor: pointer;
-        box-shadow: 0 2px 8px rgba(0,0,0,.2); z-index: 999;
-      }
-      .print-btn:hover { background: #a0522d; }
-    }
-  </style>
-</head>
-<body>
-
-<button class="print-btn" onclick="window.print()">🖨️ Cetak / Simpan PDF</button>
-
-<div class="doc-header">
-  <span class="brand">SCHOLARIS — Academic Writer Engine</span>
-  <span>${tanggal}</span>
-</div>
-
-<div class="doc-content">
-  ${el.innerHTML}
-</div>
-
-<div class="doc-footer">
-  Dokumen ini dihasilkan oleh SCHOLARIS Academic Writer Engine &mdash; ${tanggal}
-</div>
-
-<scr' + 'ipt>
-  // Auto-trigger print dialog setelah render selesai
-  window.onload = function() {
-    setTimeout(function() { window.print(); }, 600);
-  };
-  // Tutup jendela setelah print selesai (opsional)
-  window.onafterprint = function() {
-    setTimeout(function() { window.close(); }, 300);
-  };
-<\/script>
-// Auto-save Indicator
-<div class="autosave-indicator" id="autosaveIndicator">
-  <span class="as-dot"></span>
-  <span id="autosaveMsg">Tersimpan otomatis</span>
-</div>
-
-// Template Library Modal
-<div class="template-library-overlay" id="tlOverlay">
-  <div class="tl-modal">
-    <div class="tl-header">
-      <span class="tl-title">📚 Template Library — 20+ Bidang Ilmu</span>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <input type="text" class="tl-search" id="tlSearch" placeholder="Cari template..." oninput="filterTemplates(this.value)">
-        <button class="btn btn-sm btn-secondary" onclick="closeTL()">✕</button>
-      </div>
-    </div>
-    <div class="tl-body">
-      <div class="tl-cats" id="tlCats"></div>
-      <div class="tl-grid" id="tlGrid"></div>
-    </div>
-  </div>
-</div>
-
-</body>
-</html>`);
-
-  printWin.document.close();
-  toast('✅ Jendela PDF dibuka — pilih "Save as PDF" di dialog print');
-}
-
-// ---- DEV CARD: Engine status update ----
-async function testConnectionFromTips() {
-  const engineEl = document.getElementById('devEngineStatus');
-  const crEl     = document.getElementById('devCrossrefStatus');
-  if (engineEl) { engineEl.textContent = 'Menguji...'; engineEl.style.color = '#d4a574'; }
-  if (crEl)     { crEl.textContent = 'Menguji...'; crEl.style.color = '#d4a574'; }
-  try {
-    await callGAS({ action: 'ping' }, 12000);
-    if (engineEl) { engineEl.textContent = 'Aktif ✓'; engineEl.style.color = '#6fcf6f'; }
-  } catch(e) {
-    if (engineEl) { engineEl.textContent = 'Periksa GAS'; engineEl.style.color = '#e07070'; }
-  }
-  try {
-    await fetch('https://api.crossref.org/works?query=test&rows=1');
-    if (crEl) { crEl.textContent = 'Terhubung ✓'; crEl.style.color = '#6fcf6f'; }
-  } catch(e) {
-    if (crEl) { crEl.textContent = 'Gagal'; crEl.style.color = '#e07070'; }
-  }
-}
-
-// ---- UTILS ----
-// ================================================================
-// ██████  FITUR PRODUKSI 1 — DOCX EXPORT (docx.js v9)
-// ================================================================
-
+// ── exportDOCX: untuk AI Writer page (tombol Export DOCX utama) ─
 async function exportDOCX() {
   if (!lastOutput || lastOutput.trim().length < 50) {
     return toast('Tidak ada teks untuk dieksport. Generate teks terlebih dahulu.');
   }
   toast('⏳ Membuat file DOCX...', 2500);
 
-  const titleEl  = document.getElementById('writeTitle');
-  const docTitle = (titleEl && titleEl.value.trim()) || 'Dokumen SCHOLARIS';
-  const authorEl = document.getElementById('mbName');
-  const author   = (authorEl && authorEl.textContent.trim() !== '—') ? authorEl.textContent.trim() : 'SCHOLARIS User';
-  const today    = new Date().toLocaleDateString('id-ID', {day:'2-digit', month:'long', year:'numeric'});
-  const wc       = countWords(lastOutput);
-
-  // ── Coba docx.js library terlebih dahulu ────────────────────────
   try {
-    if (typeof docx === 'undefined') throw new Error('library-not-loaded');
-
-    const { Document, Paragraph, TextRun, HeadingLevel, AlignmentType,
-            Header, Footer, Packer, BorderStyle, convertInchesToTwip } = docx;
-
-    if (!Document || !Packer || !Packer.toBlob) throw new Error('api-missing');
-
-    // Parse markdown → docx paragraphs
-    const mdLines  = lastOutput.split('\n');
-    const docParts = [];
-    let   listBuf  = [];
-
-    const flushList = () => {
-      if (!listBuf.length) return;
-      listBuf.forEach(item => {
-        docParts.push(new Paragraph({
-          text: item.replace(/\*\*/g,'').replace(/\*/g,''),
-          bullet: { level: 0 },
-          spacing: { after: 80, line: 360 }
-        }));
-      });
-      listBuf = [];
-    };
-
-    const makeRuns = (text) => {
-      const parts = [];
-      const rx = /(\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`)/g;
-      let last = 0, m;
-      while ((m = rx.exec(text)) !== null) {
-        if (m.index > last) parts.push(new TextRun({text: text.slice(last, m.index), font:'Times New Roman', size:24}));
-        if (m[2]) parts.push(new TextRun({text: m[2], bold: true, font:'Times New Roman', size:24}));
-        else if (m[3]) parts.push(new TextRun({text: m[3], italics: true, font:'Times New Roman', size:24}));
-        else if (m[4]) parts.push(new TextRun({text: m[4], font:'Courier New', size:22}));
-        last = rx.lastIndex;
-      }
-      if (last < text.length) parts.push(new TextRun({text: text.slice(last), font:'Times New Roman', size:24}));
-      return parts.length ? parts : [new TextRun({text, font:'Times New Roman', size:24})];
-    };
-
-    for (const raw of mdLines) {
-      const line = raw.trim();
-      if (!line) {
-        flushList();
-        docParts.push(new Paragraph({text:'', spacing:{after:120}}));
-        continue;
-      }
-      if (line.startsWith('#### ')) {
-        flushList();
-        docParts.push(new Paragraph({text: line.slice(5).replace(/\*\*/g,''), heading: HeadingLevel.HEADING_4, spacing:{before:140,after:80}}));
-      } else if (line.startsWith('### ')) {
-        flushList();
-        docParts.push(new Paragraph({text: line.slice(4).replace(/\*\*/g,''), heading: HeadingLevel.HEADING_3, spacing:{before:180,after:100}}));
-      } else if (line.startsWith('## ')) {
-        flushList();
-        docParts.push(new Paragraph({text: line.slice(3).replace(/\*\*/g,''), heading: HeadingLevel.HEADING_2, spacing:{before:240,after:140}}));
-      } else if (line.startsWith('# ')) {
-        flushList();
-        docParts.push(new Paragraph({text: line.slice(2).replace(/\*\*/g,''), heading: HeadingLevel.HEADING_1, spacing:{before:320,after:180}}));
-      } else if (line.startsWith('- ') || line.startsWith('* ')) {
-        listBuf.push(line.slice(2));
-      } else if (/^\d+\.\s/.test(line)) {
-        listBuf.push(line.replace(/^\d+\.\s/,''));
-      } else if (line.startsWith('> ')) {
-        flushList();
-        docParts.push(new Paragraph({
-          children: [new TextRun({text: line.slice(2), italics:true, color:'444444', font:'Times New Roman', size:24})],
-          indent: {left: convertInchesToTwip(0.5)},
-          spacing: {after:100, line:320}
-        }));
-      } else if (line.startsWith('---') || line.startsWith('===')) {
-        flushList();
-      } else {
-        flushList();
-        docParts.push(new Paragraph({
-          children: makeRuns(line),
-          spacing: {after:120, line:360},
-          alignment: AlignmentType.JUSTIFIED,
-          indent: {firstLine: convertInchesToTwip(0.5)}
-        }));
-      }
-    }
-    flushList();
-
-    const doc = new Document({
-      creator: 'SCHOLARIS AI Academic Writer',
-      title: docTitle,
-      description: 'Generated by SCHOLARIS',
-      styles: {
-        default: {
-          document: {
-            run: {font:'Times New Roman', size:24, color:'000000'},
-            paragraph: {spacing:{line:360}}
-          }
-        },
-        paragraphStyles: [
-          {id:'Heading1', name:'Heading 1',
-           basedOn:'Normal', next:'Normal',
-           run:{font:'Times New Roman', size:28, bold:true, color:'1a1a2e'},
-           paragraph:{spacing:{before:320, after:180}, alignment:AlignmentType.CENTER}},
-          {id:'Heading2', name:'Heading 2',
-           basedOn:'Normal', next:'Normal',
-           run:{font:'Times New Roman', size:26, bold:true, color:'16213e'},
-           paragraph:{spacing:{before:240, after:140}}},
-          {id:'Heading3', name:'Heading 3',
-           basedOn:'Normal', next:'Normal',
-           run:{font:'Times New Roman', size:24, bold:true, italics:true, color:'0f3460'},
-           paragraph:{spacing:{before:180, after:100}}},
-          {id:'Heading4', name:'Heading 4',
-           basedOn:'Normal', next:'Normal',
-           run:{font:'Times New Roman', size:24, bold:true},
-           paragraph:{spacing:{before:140, after:80}}}
-        ]
-      },
-      sections: [{
-        properties: {
-          page: {
-            margin: {
-              top:    convertInchesToTwip(1.18),
-              bottom: convertInchesToTwip(1.18),
-              left:   convertInchesToTwip(1.38),
-              right:  convertInchesToTwip(1.18)
-            }
-          }
-        },
-        headers: {
-          default: new Header({
-            children: [new Paragraph({
-              children: [
-                new TextRun({text: 'SCHOLARIS Academic Writer  |  ', size:18, color:'888888', font:'Times New Roman'}),
-                new TextRun({text: docTitle.slice(0,55) + (docTitle.length>55 ? '...' : ''), size:18, color:'aaaaaa', font:'Times New Roman'})
-              ],
-              border: {bottom: {style: BorderStyle.SINGLE, size:4, color:'dddddd'}}
-            })]
-          })
-        },
-        footers: {
-          default: new Footer({
-            children: [new Paragraph({
-              children: [
-                new TextRun({text: author + '  |  ' + today + '  |  ' + wc.toLocaleString() + ' kata', size:18, color:'888888', font:'Times New Roman'})
-              ],
-              alignment: AlignmentType.CENTER,
-              border: {top: {style: BorderStyle.SINGLE, size:4, color:'dddddd'}}
-            })]
-          })
-        },
-        children: [
-          new Paragraph({text:'', spacing:{after:200}}),
-          new Paragraph({
-            children: [new TextRun({text: docTitle, bold:true, size:32, font:'Times New Roman', color:'1a1a2e'})],
-            heading: HeadingLevel.HEADING_1,
-            spacing: {before:0, after:240}
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({text: author, bold:true, size:22, font:'Times New Roman', color:'444444'}),
-              new TextRun({text: '   ·   ', size:22, color:'cccccc'}),
-              new TextRun({text: today, size:22, font:'Times New Roman', color:'666666'}),
-              new TextRun({text: '   ·   ', size:22, color:'cccccc'}),
-              new TextRun({text: wc.toLocaleString() + ' kata', size:22, font:'Times New Roman', color:'666666'})
-            ],
-            alignment: AlignmentType.CENTER,
-            spacing: {after:400}
-          }),
-          new Paragraph({
-            children: [new TextRun({text:'', size:24})],
-            border: {bottom: {style: BorderStyle.SINGLE, size:6, color:'8b4513'}},
-            spacing: {after:300}
-          }),
-          ...docParts
-        ]
-      }]
+    var titleEl  = document.getElementById('writeTitle');
+    var docTitle = (titleEl && titleEl.value.trim()) || 'Dokumen SCHOLARIS';
+    var authorEl = document.getElementById('mbName');
+    var author   = (authorEl && authorEl.textContent && authorEl.textContent.trim() !== '—')
+      ? authorEl.textContent.trim() : 'SCHOLARIS User';
+    var today = new Date().toLocaleDateString('id-ID', {
+      day: '2-digit', month: 'long', year: 'numeric'
     });
+    var wc = countWords(lastOutput);
 
-    const blob = await Packer.toBlob(doc);
-    const fname = docTitle.slice(0,60)
-      .replace(/[^\w\s\-_\u00C0-\u024F\u0600-\u06FF]/g,'')
-      .trim().replace(/\s+/g,'_') || 'scholaris';
+    var bodyHtml = (typeof marked !== 'undefined' && marked.parse)
+      ? marked.parse(lastOutput)
+      : '<p>' + lastOutput.replace(/\n\n/g,'</p><p>').replace(/\n/g,'<br>') + '</p>';
 
-    const url = URL.createObjectURL(blob);
-    const a   = document.createElement('a');
-    a.href     = url;
-    a.download = fname + '.docx';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
-    toast('✅ File DOCX berhasil diunduh!', 4000);
+    // Tambahkan info kata pada footer (sebagai bagian konten)
+    var footerInfo = '<p style="text-align:center;font-size:10pt;color:#888;' +
+      'border-top:1pt solid #ccc;margin-top:24pt;padding-top:6pt;text-indent:0;">' +
+      'Dihasilkan SCHOLARIS AI Academic Writer &nbsp;&bull;&nbsp; ' +
+      today + ' &nbsp;&bull;&nbsp; ' + wc.toLocaleString() + ' kata' +
+      '</p>';
+
+    var html = _buildWordHTML(docTitle, author, today, bodyHtml + footerInfo);
+    _downloadWordFile(html, docTitle);
+
+    toast('✅ File Word berhasil diunduh!', 4000);
+    // Auto-save ke history
     saveToHistory('docx');
 
-  } catch(libErr) {
-    // ── Fallback: HTML→Word (works without any library) ────────────
-    console.warn('docx library error, using HTML-Word fallback:', libErr.message);
-    try {
-      _exportDOCXFallback(docTitle, author, today, wc);
-    } catch(fbErr) {
-      toast('❌ Export gagal: ' + fbErr.message);
-      console.error('Export fallback error:', fbErr);
-    }
+  } catch(e) {
+    toast('❌ Export gagal: ' + e.message);
+    console.error('exportDOCX error:', e);
   }
 }
 
-// ── Fallback: HTML→Word export (no library, always works) ──────────
-function _exportDOCXFallback(docTitle, author, today, wc) {
-  const bodyHtml = marked.parse(lastOutput);
-  const wordHtml = '<?xml version="1.0" encoding="UTF-8"?>' +
-    '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">' +
-    '<html xmlns="http://www.w3.org/1999/xhtml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">' +
-    '<head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>' +
-    '<meta name="ProgId" content="Word.Document"/>' +
-    '<title>' + escHtml(docTitle) + '</title>' +
-    '<style>' +
-    '@page WordSection1{size:21.0cm 29.7cm;margin:3.0cm 2.54cm 2.54cm 3.0cm;}' +
-    'div.WordSection1{page:WordSection1;}' +
-    'body{font-family:"Times New Roman",serif;font-size:12pt;line-height:2.0;color:#000;}' +
-    'h1{font-size:14pt;font-weight:bold;text-align:center;margin:24pt 0 12pt;}' +
-    'h2{font-size:13pt;font-weight:bold;margin:18pt 0 8pt;}' +
-    'h3{font-size:12pt;font-weight:bold;font-style:italic;margin:14pt 0 6pt;}' +
-    'p{font-size:12pt;text-align:justify;text-indent:1.27cm;margin:0 0 6pt;}' +
-    'ul,ol{margin-left:1.5cm;font-size:12pt;}' +
-    'li{margin-bottom:4pt;}' +
-    'blockquote{border-left:3pt solid #8b4513;padding-left:14pt;margin:8pt 0 8pt 1cm;font-style:italic;color:#444;}' +
-    '.cover{text-align:center;border-bottom:2pt solid #8b4513;padding-bottom:14pt;margin-bottom:24pt;}' +
-    '</style></head><body><div class="WordSection1">' +
-    '<div class="cover">' +
-    '<h1 style="border:none;margin-bottom:6pt;">' + escHtml(docTitle) + '</h1>' +
-    '<p style="text-indent:0;text-align:center;font-size:10pt;color:#666;">' + escHtml(author) + ' &nbsp;|&nbsp; ' + today + ' &nbsp;|&nbsp; ' + (wc||0).toLocaleString() + ' kata</p>' +
-    '</div>' +
-    bodyHtml +
-    '</div></body></html>';
+// Alias fallback (tidak lagi diperlukan tapi dijaga agar tidak ada ReferenceError)
+function _exportDOCXFallback(t, a, d, w) { return exportDOCX(); }
 
-  const blob = new Blob(['\ufeff' + wordHtml], {type:'application/msword;charset=utf-8'});
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
-  a.download = (docTitle.slice(0,60).replace(/[^\w\s\-_]/g,'').trim().replace(/\s+/g,'_') || 'scholaris') + '.doc';
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
-  toast('✅ Dokumen Word berhasil diunduh! (format .doc)', 4000);
-  saveToHistory('docx');
-}
 
 // ── PDF Export (browser print dialog) ───────────────────────────
 function exportPDF() {
@@ -9482,7 +9192,7 @@ async function jcFetchRefs() {
     const s2CJ=allRefs.filter(r=>r.source==='Semantic Scholar').length;
     toast('✅ '+allRefs.length+' referensi hexa-source — CR('+crC+') DOAJ('+djC+') PMC('+epC+') OA('+oaC+') Scopus('+scCJ+') S2('+s2CJ+')');
   } catch(e) {
-    toast('❌ Quad-source error: ' + e.message);
+    toast('❌ Hexa-source error: ' + e.message);
     document.getElementById('jcRefsLoading').style.display = 'none';
     document.getElementById('jcRefsActions').style.display = 'block';
   }
@@ -9558,7 +9268,7 @@ INSTRUKSI TAMBAHAN: ${extraInstr||'—'}`;
 
   const jcSystem = `You are SCHOLARIS Journal Converter — an elite academic editor converting ${jcSourceType} into ${qLevel} Scopus journal articles.
 MANDATE: Write ENTIRELY in ${langName}. Target: ${qLevel}${targetJnl?' — '+targetJnl:''}. Scope: ${scope||'general'}. Citation: ${citeStyle.toUpperCase()}.
-Dramatically elevate scholarly quality. Strengthen novelty in every section. Use ONLY provided quad-source references (CrossRef+DOAJ+EuropePMC+OpenAlex) — NEVER fabricate. Never truncate. Minimum word targets are floors.`;
+Dramatically elevate scholarly quality. Strengthen novelty in every section. Use ONLY provided hexa-source references (CrossRef+DOAJ+EuropePMC+OpenAlex+🟠ScopusFilter+SemanticScholar) — NEVER fabricate hallucinated citations. Never truncate. Minimum word targets are floors.`;
 
   const jcSegInst = {
     title_abstract: `Write TITLE (compelling, specific, Q1/Q2 appropriate), ABSTRACT (structured: Background 2 sentences, Purpose 1 sentence, Methods 2-3 sentences, Findings 3-4 sentences, Conclusion/Implications 1-2 sentences; max 250 words in ${langName}), and KEYWORDS (5-7 optimized terms). Novelty must be explicit in abstract.`,
