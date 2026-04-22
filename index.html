@@ -5288,13 +5288,25 @@ function onAuthSuccess(session, showToast = true) {
   updateMemberBadge(session);
   // BRIDGE: register session & start live heartbeat
   if (session && session.email) {
-    // Write initial quota entry so admin can see user even before first generation
+    // Initialize quota entry — seed with 3 tokens if member has no token yet
     try {
-      var _iq = JSON.parse(localStorage.getItem(_BKEY_QUOTA) || '{}');
+      var _iq  = JSON.parse(localStorage.getItem(_BKEY_QUOTA) || '{}');
       var _iqk = (session.email || '').toLowerCase();
-      if (!_iq[_iqk]) _iq[_iqk] = { tokens: 0, wordsGenerated: 0, lastUpdated: new Date().toISOString() };
-      localStorage.setItem(_BKEY_QUOTA, JSON.stringify(_iq));
+      if (!_iq[_iqk]) {
+        // Brand-new member in this browser — seed with DEFAULT 3 tokens
+        // Admin may override via tokApply; this ensures member can start immediately
+        _iq[_iqk] = { tokens: 3, wordsGenerated: 0, lastUpdated: new Date().toISOString() };
+        localStorage.setItem(_BKEY_QUOTA, JSON.stringify(_iq));
+      } else if (_iq[_iqk].tokens === 0) {
+        // Member exists but tokens=0 (explicit admin reset or migration)
+        // Keep as-is — do NOT auto-add; admin already decided 0
+      }
     } catch (_iqe) {}
+    // Immediately poll GAS to get the AUTHORITATIVE token count from server
+    // This overrides the local seed if admin already configured a different amount
+    setTimeout(function(){
+      if (typeof _gasTokenPoll === 'function') _gasTokenPoll().catch(function(){});
+    }, 500);
     bridgeHeartbeat(session.email, session.nama, 'SCHOLARIS', '—', 'Login');
     setTimeout(function(){ if(typeof updateTokenBadge==='function') updateTokenBadge(session.email); }, 300);
     setTimeout(function(){ if(typeof tokenShowQuotaBanner==='function') tokenShowQuotaBanner(session.email); }, 1800);
@@ -11848,7 +11860,19 @@ async function doReview() {
     }, 320000);
     if (!result || !result.success) throw new Error(result?.error || 'Error');
     document.getElementById('reviewOutputCard').style.display = '';
-    document.getElementById('reviewOutputArea').innerHTML = marked.parse(result.content);
+    var _rvText = result.content || '';
+    document.getElementById('reviewOutputArea').innerHTML = marked.parse(_rvText);
+    // Track word usage
+    (function(){
+      var _wRv = typeof countWords==='function' ? countWords(_rvText) : 0;
+      var _sRv = typeof getSession==='function' ? getSession() : null;
+      if (_wRv > 0 && _sRv && _sRv.email) {
+        totalWords = (totalWords||0) + _wRv;
+        bridgeWriteWords(_sRv.email, _wRv, totalWords, 'review');
+        if (typeof updateTokenBadge==='function') updateTokenBadge(_sRv.email);
+        if (typeof updateStatsDisplay==='function') updateStatsDisplay();
+      }
+    })();
   } catch (e) { toast('Error: ' + e.message); }
   setLoading(false);
 }
@@ -16346,8 +16370,19 @@ ARTIKEL:\n\n${jcFinalOutput.substring(0, 8000)}` }],
     }, 180000);
     if (!result?.success) throw new Error(result?.error||'Review gagal');
     document.getElementById('jcReviewCard').style.display = '';
-    document.getElementById('jcReviewArea').innerHTML = marked.parse(result.content);
+    var _jrvText = result.content || '';
+    document.getElementById('jcReviewArea').innerHTML = marked.parse(_jrvText);
     document.getElementById('jcReviewCard').scrollIntoView({ behavior:'smooth', block:'start' });
+    // Track word usage
+    (function(){
+      var _wJrv = typeof countWords==='function' ? countWords(_jrvText) : 0;
+      var _sJrv = typeof getSession==='function' ? getSession() : null;
+      if (_wJrv > 0 && _sJrv && _sJrv.email) {
+        totalWords = (totalWords||0) + _wJrv;
+        bridgeWriteWords(_sJrv.email, _wJrv, totalWords, 'jc-review');
+        if (typeof updateTokenBadge==='function') updateTokenBadge(_sJrv.email);
+      }
+    })();
   } catch(e) { toast('❌ Review gagal: ' + e.message); }
   setLoading(false);
 }
@@ -17270,8 +17305,8 @@ async function _gasTokenPoll() {
     var rEntry      = remoteQuota[ek];
     if (!rEntry) return;
 
-    // Cek perubahan via simple hash
-    var newHash = ek + ':' + (rEntry.tokens||0) + ':' + (rEntry.lastUpdated||'');
+    // Cek perubahan: tokens, wordsGenerated, dan lastUpdated
+    var newHash = ek + ':' + (rEntry.tokens||0) + ':' + (rEntry.wordsGenerated||0) + ':' + (rEntry.lastUpdated||'');
     if (newHash === _gasTokenLastHash) return;
     _gasTokenLastHash = newHash;
 
@@ -17969,22 +18004,28 @@ if (typeof _bridgeDispatch !== 'undefined') {
 }
 // ════════════════════════════════════════════════════════════════
 
-// ══ SCHOLARIS TOKEN LIVE SYSTEM ═══════════════════════════════
-// Live badge refresh setiap 8 detik (persists across page refreshes)
-setInterval(function(){
-  var _tbsG = typeof getSession==='function' ? getSession() : null;
-  if(_tbsG && _tbsG.email && typeof updateTokenBadge==='function') {
-    updateTokenBadge(_tbsG.email);
+// ══ SCHOLARIS TOKEN LIVE SYSTEM v2 — UNIFIED ════════════════════
+// Single authoritative interval block — no duplicates
+(function _scholTokenSys() {
+  // 1. Badge refresh every 8s (local, immediate)
+  if (!window._tokBadgeInt) {
+    window._tokBadgeInt = setInterval(function(){
+      var s = typeof getSession==='function' ? getSession() : null;
+      if (s && s.email && typeof updateTokenBadge==='function') updateTokenBadge(s.email);
+    }, 8000);
   }
-}, 8000);
-
-// Startup token sync (for page refresh mid-session)
-(function(){
+  // 2. GAS cross-browser poll every 15s
+  if (!window._tokGasPollInt) {
+    window._tokGasPollInt = setInterval(function(){
+      if (typeof _gasTokenPoll==='function') _gasTokenPoll().catch(function(){});
+    }, 15000);
+  }
+  // 3. Startup sync: run on page load (catches page refresh mid-session)
   setTimeout(function(){
-    var _stS = typeof getSession==='function' ? getSession() : null;
-    if(_stS && _stS.email) {
-      if(typeof updateTokenBadge==='function') updateTokenBadge(_stS.email);
-      if(typeof _gasTokenPoll==='function') _gasTokenPoll().catch(function(){});
+    var s = typeof getSession==='function' ? getSession() : null;
+    if (s && s.email) {
+      if (typeof updateTokenBadge==='function') updateTokenBadge(s.email);
+      if (typeof _gasTokenPoll==='function') _gasTokenPoll().catch(function(){});
     }
   }, 1500);
 })();
