@@ -12316,6 +12316,30 @@ function updateStats(content, model) {
     if (typeof admCheckQuotaAfterGenerate === 'function') admCheckQuotaAfterGenerate(_s.email);
   }
 }
+// ── updateStatsDisplay — called after every generate / ref search ────────
+// Updates the 4 stat cards on the AI Writer page header:
+//   statWords, statRefs, statSessions, statModel
+function updateStatsDisplay() {
+  try {
+    var sw = document.getElementById('statWords');
+    var sr = document.getElementById('statRefs');
+    var ss = document.getElementById('statSessions');
+    if (sw) sw.textContent = (typeof totalWords !== 'undefined' ? totalWords : 0).toLocaleString('id-ID');
+    if (sr) sr.textContent = (typeof totalRefs  !== 'undefined' ? totalRefs  : 0).toLocaleString('id-ID');
+    if (ss) ss.textContent = (typeof sessionCount !== 'undefined' ? sessionCount : 0);
+    // Also refresh devCard counters (sidebar dev overlay)
+    var dw = document.getElementById('devStatWords');
+    var ds = document.getElementById('devStatSessions');
+    var dr = document.getElementById('devStatRefs');
+    if (dw) dw.textContent = (typeof totalWords !== 'undefined' ? totalWords : 0).toLocaleString('id-ID');
+    if (ds) ds.textContent = (typeof sessionCount !== 'undefined' ? sessionCount : 0);
+    if (dr) dr.textContent = (typeof totalRefs !== 'undefined' ? totalRefs : 0);
+  } catch(_e) {
+    // Silent fail — stats display is non-critical
+  }
+}
+
+
 
 // ---- EXPORT ----
 function copyOutput() { copyToClipboard(lastOutput); }
