@@ -1444,7 +1444,7 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
 
 /* Token modal overlay */
 .tok-mo-overlay{
-  position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9999;
+  position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10100;
   display:none;align-items:center;justify-content:center;padding:16px;
 }
 .tok-mo-overlay.open{display:flex;}
@@ -5148,7 +5148,7 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
 </div>
 
 <!-- ══ QUOTA HABIS ALERT (User-facing) ══════════════════════ -->
-<div class="quota-alert-overlay" id="quotaAlertOverlay">
+<div class="quota-alert-overlay" id="quotaAlertOverlay" onclick="if(event.target===this){var b=document.querySelector('.quota-alert-box');if(b){b.style.animation='none';b.offsetHeight;b.style.animation='shakeBox .35s ease';}}">
   <div class="quota-alert-box">
     <div class="quota-alert-icon">⚠️</div>
     <div class="quota-alert-title">Kuota Kata Habis!</div>
@@ -5310,18 +5310,20 @@ function onAuthSuccess(session, showToast = true) {
     bridgeHeartbeat(session.email, session.nama, 'SCHOLARIS', '—', 'Login');
     setTimeout(function(){ if(typeof updateTokenBadge==='function') updateTokenBadge(session.email); }, 300);
     setTimeout(function(){ if(typeof tokenShowQuotaBanner==='function') tokenShowQuotaBanner(session.email); }, 1800);
-    // ── Live token badge refresh (realtime) ──────────────────────
-    if (!window._tokenBadgeInterval) {
-      window._tokenBadgeInterval = setInterval(function() {
-        var _tbs = typeof getSession === 'function' ? getSession() : null;
-        if (_tbs && _tbs.email) {
-          if (typeof updateTokenBadge === 'function') updateTokenBadge(_tbs.email);
-        }
-      }, 8000);  // setiap 8 detik
-    }
+    // Badge refresh ditangani oleh _scholTokenSys (8s unified interval)
     // ── GAS cross-browser token poll on login ─────────────────────
     setTimeout(function(){ if(typeof _gasTokenPoll==='function') _gasTokenPoll().catch(function(){}); }, 2000);
     setTimeout(function(){ if(typeof _gasTokenPoll==='function') _gasTokenPoll().catch(function(){}); }, 8000);
+    // ── Block check 3s setelah login (setelah GAS poll pertama selesai) ──
+    setTimeout(function(){
+      var _sL = typeof getSession==='function' ? getSession() : null;
+      if (_sL && _sL.email) {
+        var _qL = typeof _bridgeGetQuota==='function' ? _bridgeGetQuota(_sL.email) : null;
+        if (_qL && (_qL.remaining<=0 || (_qL.tokens===0 && (_qL.generated||0)>0))) {
+          if (typeof checkAndShowQuotaAlert==='function') checkAndShowQuotaAlert(_sL.email);
+        }
+      }
+    }, 3000);
     // Heartbeat every 20s so admin sees user as online
     livePresenceStart();  // kirim presence ke GAS realtime
     if (!window._bridgeHBInterval) {
@@ -5468,8 +5470,10 @@ function updateTokenBadge(email) {
     }
   }
 
-  // Auto-block if quota exhausted
-  if(q.remaining<=0 && q.tokens>0) {
+  // Auto-block if quota exhausted OR tokens revoked
+  var _needBlock = (q.remaining<=0 && q.tokens>0) ||
+                   (q.tokens===0 && (q.generated||0)>0);
+  if(_needBlock) {
     if(typeof checkAndShowQuotaAlert==='function') {
       setTimeout(function(){ checkAndShowQuotaAlert(email); }, 300);
     }
@@ -17331,8 +17335,13 @@ async function _gasTokenPoll() {
     localStorage.setItem(TOK_KEY, JSON.stringify(localQuota));
 
     if (!tokenChanged) {
-      // Hanya kata dibuat yang berubah — refresh badge tanpa toast
+      // Hanya kata berubah — refresh badge (badge auto-block jika habis)
       if (typeof updateTokenBadge === 'function') updateTokenBadge(sess.email);
+      // Cross-browser: jika quota habis karena kata, langsung block
+      var _qCB = typeof _bridgeGetQuota==='function' ? _bridgeGetQuota(sess.email) : null;
+      if (_qCB && (_qCB.remaining <= 0 || _qCB.pct >= 100)) {
+        if (typeof checkAndShowQuotaAlert==='function') checkAndShowQuotaAlert(sess.email);
+      }
       if (typeof admCheckQuotaAfterGenerate === 'function') admCheckQuotaAfterGenerate(sess.email);
       return;
     }
@@ -17450,7 +17459,9 @@ var _quotaAlertShown = false;
 function checkAndShowQuotaAlert(email) {
   if (!email) return;
   var q = typeof _bridgeGetQuota === 'function' ? _bridgeGetQuota(email) : admGetQuota(email);
-  if (!q || q.tokens === 0) return; // belum punya token, skip
+  if (!q) return;
+  // Hanya skip jika benar-benar belum pernah punya token (bukan dicabut admin)
+  if (q.tokens === 0 && (q.generated || 0) === 0) return;
 
   // Set info rekening di alert
   var qaRek = document.getElementById('qaRekening');
@@ -17537,8 +17548,12 @@ function showQuotaWarningBanner(email, q, level) {
 }
 
 function showTokenRequestFromAlert() {
-  closeQuotaAlert();
-  showTokReqMo();
+  // JANGAN tutup overlay quota — overlay tetap memblokir di belakang
+  var tokMo = document.getElementById('tokReqMoOverlay');
+  if (tokMo) {
+    tokMo.style.zIndex = '10100'; // di atas quota overlay (z-index:10000)
+    tokMo.classList.add('open');
+  }
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -17558,7 +17573,17 @@ function showTokReqMo() {
 }
 
 function closeTokReqMo() {
-  document.getElementById('tokReqMoOverlay').classList.remove('open');
+  var mo = document.getElementById('tokReqMoOverlay');
+  if (mo) { mo.classList.remove('open'); mo.style.zIndex = ''; }
+  // Jika quota masih habis, tampilkan kembali overlay blokir
+  var sess = typeof getSession==='function' ? getSession() : null;
+  if (sess && sess.email) {
+    var _q = typeof _bridgeGetQuota==='function' ? _bridgeGetQuota(sess.email) : null;
+    if (_q && (_q.remaining <= 0 || (_q.tokens === 0 && (_q.generated||0) > 0))) {
+      var qo = document.getElementById('quotaAlertOverlay');
+      if (qo && !qo.classList.contains('open')) qo.classList.add('open');
+    }
+  }
 }
 
 function tokReqSelectPkg(btn, n) {
@@ -18027,14 +18052,23 @@ if (typeof _bridgeDispatch !== 'undefined') {
     if (typeof _gasTokenPoll==='function') _gasTokenPoll().catch(function(){});
   }, 15000);
 
-  // 3. Startup sync: runs 1.5s after page load
+  // 3. Startup sync: runs 1.5s + 5s after page load
   setTimeout(function(){
     var s = typeof getSession==='function' ? getSession() : null;
     if (s && s.email) {
       if (typeof updateTokenBadge==='function') updateTokenBadge(s.email);
       if (typeof _gasTokenPoll==='function') _gasTokenPoll().catch(function(){});
+      // Auto-block langsung jika quota sudah habis saat page dimuat
+      var _qS = typeof _bridgeGetQuota==='function' ? _bridgeGetQuota(s.email) : null;
+      if (_qS && (_qS.remaining <= 0 || (_qS.tokens===0 && (_qS.generated||0)>0))) {
+        if (typeof checkAndShowQuotaAlert==='function') checkAndShowQuotaAlert(s.email);
+      }
     }
   }, 1500);
+  // Second GAS sync at 5s — catches server data after network load
+  setTimeout(function(){
+    if (typeof _gasTokenPoll==='function') _gasTokenPoll().catch(function(){});
+  }, 5000);
 })();
 
 </script>
