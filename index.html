@@ -15711,6 +15711,9 @@ function jcGetSelectedScopes() {
 
 // ---- STAGE 1→2: AI ANALYSIS ----
 async function jcRunAnalysis() {
+  // ── Quota guard ────────────────────────────────────────
+  if (typeof _checkQuotaBeforeGenerate === 'function' && !_checkQuotaBeforeGenerate()) return;
+
   const sourceText = document.getElementById('jcSourceText').value.trim();
   if (!sourceText || sourceText.length < 200) {
     return toast('⚠️ Tempel teks dokumen sumber terlebih dahulu (minimal 200 karakter)');
@@ -15779,6 +15782,18 @@ ${sourceText.substring(0, 12000)}`;
     document.getElementById('jcAnalysisLoading').style.display = 'none';
     document.getElementById('jcAnalysisResult').style.display  = 'block';
     toast('✅ Analisis selesai — tinjau dan edit sebelum melanjutkan');
+    // Track minimal usage for analysis (JSON extraction)
+    (function(){
+      var _sJA = typeof getSession==='function' ? getSession() : null;
+      if (_sJA && _sJA.email) {
+        var _wJA = typeof countWords==='function' ? countWords(result.content||'') : 0;
+        if (_wJA > 50) {  // only track if substantial response
+          totalWords = (totalWords||0) + _wJA;
+          bridgeWriteWords(_sJA.email, _wJA, totalWords, 'jc-analysis');
+          if (typeof updateTokenBadge==='function') updateTokenBadge(_sJA.email);
+        }
+      }
+    })();
   } catch(e) {
     toast('❌ Analisis gagal: ' + e.message);
     jcGoStep(0);
@@ -17968,15 +17983,7 @@ function _scEnginePollNow(){_scLastPollTs=null;_scEnginePoll().catch(function(){
   }
 })();
 
-// ── Badge auto-refresh setelah generate (8s interval) ────────
-setInterval(function(){
-  var s=typeof getSession==='function'?getSession():null;
-  if(s&&s.email&&typeof updateTokenBadge==='function') updateTokenBadge(s.email);
-},8000);
-// ── GAS Token Poll setiap 15 detik (cross-browser sync) ──────
-setInterval(function(){
-  if(typeof _gasTokenPoll==='function') _gasTokenPoll().catch(function(){});
-},15000);
+// ── Badge refresh & GAS poll are handled by unified block below ─
 
 
 // Bridge: admin terima notifikasi token_requested dari user
@@ -18004,23 +18011,26 @@ if (typeof _bridgeDispatch !== 'undefined') {
 }
 // ════════════════════════════════════════════════════════════════
 
-// ══ SCHOLARIS TOKEN LIVE SYSTEM v2 — UNIFIED ════════════════════
-// Single authoritative interval block — no duplicates
+// ══ SCHOLARIS TOKEN LIVE SYSTEM v3 — SINGLE AUTHORITY ═══════════
+// Clears any pre-existing intervals before setting new ones
 (function _scholTokenSys() {
+  // Clear any previous badge/poll intervals that may have been set
+  if (window._tokBadgeInt)   { clearInterval(window._tokBadgeInt);   window._tokBadgeInt   = null; }
+  if (window._tokGasPollInt) { clearInterval(window._tokGasPollInt); window._tokGasPollInt = null; }
+  if (window._gasTokenPollStarted) window._gasTokenPollStarted = false;
+
   // 1. Badge refresh every 8s (local, immediate)
-  if (!window._tokBadgeInt) {
-    window._tokBadgeInt = setInterval(function(){
-      var s = typeof getSession==='function' ? getSession() : null;
-      if (s && s.email && typeof updateTokenBadge==='function') updateTokenBadge(s.email);
-    }, 8000);
-  }
-  // 2. GAS cross-browser poll every 15s
-  if (!window._tokGasPollInt) {
-    window._tokGasPollInt = setInterval(function(){
-      if (typeof _gasTokenPoll==='function') _gasTokenPoll().catch(function(){});
-    }, 15000);
-  }
-  // 3. Startup sync: run on page load (catches page refresh mid-session)
+  window._tokBadgeInt = setInterval(function(){
+    var s = typeof getSession==='function' ? getSession() : null;
+    if (s && s.email && typeof updateTokenBadge==='function') updateTokenBadge(s.email);
+  }, 8000);
+
+  // 2. GAS cross-browser poll every 15s (one authoritative poll)
+  window._tokGasPollInt = setInterval(function(){
+    if (typeof _gasTokenPoll==='function') _gasTokenPoll().catch(function(){});
+  }, 15000);
+
+  // 3. Startup sync: runs 1.5s after page load
   setTimeout(function(){
     var s = typeof getSession==='function' ? getSession() : null;
     if (s && s.email) {
