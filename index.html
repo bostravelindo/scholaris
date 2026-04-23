@@ -5164,7 +5164,7 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
     </div>
     <div class="qa-btn-row">
       <button class="qa-btn-primary" onclick="showTokenRequestFromAlert()">💬 Ajukan via WhatsApp</button>
-      <button class="qa-btn-secondary" onclick="closeQuotaAlert()">Nanti</button>
+      <button class="qa-btn-secondary" onclick="showTokenRequestFromAlert()">📋 Lihat Info Pembayaran</button>
     </div>
   </div>
 </div>
@@ -10175,8 +10175,9 @@ async function generateWithRefs() {
   var _qs = typeof getSession==='function' ? getSession() : null;
   if (_qs && _qs.email) {
     var _qq = typeof _bridgeGetQuota==='function' ? _bridgeGetQuota(_qs.email) : null;
-    if (_qq && _qq.tokens > 0 && _qq.remaining <= 0) {
-      toast('🚫 Kuota kata habis! Hubungi admin untuk penambahan token.', 6000);
+    if (_qq && (_qq.remaining <= 0 || _qq.tokens === 0)) {
+      var _msg7 = _qq.tokens === 0 ? 'Token belum diaktifkan. Hubungi admin.' : 'Kuota kata habis! Ajukan penambahan token.';
+      toast('🚫 ' + _msg7, 6000);
       if (typeof checkAndShowQuotaAlert==='function') checkAndShowQuotaAlert(_qs.email);
       return;
     }
@@ -14361,6 +14362,9 @@ async function generateBookOutlineFull() {
 }
 
 async function generateBookOutline() {
+  // ── Quota guard ──────────────────────────────────────────
+  if (typeof _checkQuotaBeforeGenerate === 'function' && !_checkQuotaBeforeGenerate()) return;
+
   var titleEl = document.getElementById('bookTitle');
   var title   = titleEl ? titleEl.value.trim() : '';
   if (!title) return toast('Masukkan judul buku terlebih dahulu.');
@@ -14428,6 +14432,16 @@ async function generateBookOutline() {
         });
         renderChapterEditor();
         toast('\u2705 Outline ' + tempChapters.length + ' bab berhasil disesuaikan dengan judul buku!');
+        // Track word usage
+        (function(){
+          var _sGBO = typeof getSession==='function' ? getSession() : null;
+          var _wGBO = typeof countWords==='function' ? countWords(r.content||'') : 0;
+          if (_wGBO > 0 && _sGBO && _sGBO.email) {
+            totalWords = (totalWords||0) + _wGBO;
+            bridgeWriteWords(_sGBO.email, _wGBO, totalWords, 'book-outline');
+            if (typeof updateTokenBadge==='function') updateTokenBadge(_sGBO.email);
+          }
+        })();
       } else {
         toast('\u2705 Outline ' + tempChapters.length + ' bab siap. Silakan edit sesuai kebutuhan.');
       }
@@ -14721,9 +14735,10 @@ async function sendBookChapter() {
   var _qsb = typeof getSession==='function' ? getSession() : null;
   if (_qsb && _qsb.email) {
     var _qqb = typeof _bridgeGetQuota==='function' ? _bridgeGetQuota(_qsb.email) : null;
-    if (_qqb && _qqb.tokens > 0 && _qqb.remaining <= 0) {
-      toast('🚫 Kuota kata habis! Hubungi admin untuk penambahan token.', 6000);
-      if (typeof checkAndShowQuotaAlert==='function') checkAndShowQuotaAlert(_qsb.email);
+    if (_qqb && (_qqb.remaining <= 0 || _qqb.tokens === 0)) {
+      var _msg8 = _qqb.tokens === 0 ? 'Token belum diaktifkan. Hubungi admin.' : 'Kuota kata habis! Ajukan penambahan token.';
+      toast('🚫 ' + _msg8, 6000);
+      if (typeof checkAndShowQuotaAlert === 'function') checkAndShowQuotaAlert(_qsb.email);
       return;
     }
   }
@@ -17497,7 +17512,20 @@ function _checkQuotaBeforeGenerate() {
   var sess = typeof getSession === 'function' ? getSession() : null;
   if (!sess || !sess.email) return true; // no session = allow (login check elsewhere)
   var q = _bridgeGetQuota(sess.email);
-  if (q.tokens === 0) return true; // no token assigned yet = allow (admin hasn't set up)
+  // tokens=0: block if member had tokens before (wordsGenerated>0) OR show contact-admin
+  if (q.tokens === 0) {
+    if (q.generated > 0) {
+      // Had tokens, now revoked by admin → hard block
+      if (typeof checkAndShowQuotaAlert === 'function') checkAndShowQuotaAlert(sess.email);
+      toast('🚫 Akses dinonaktifkan. Hubungi admin untuk aktivasi token.', 8000);
+      return false;
+    }
+    // Never had tokens (new member, waiting admin setup) → show friendly message
+    // Allow local seed check — if local shows 3 tokens, GAS may differ
+    // But if truly 0, block with info message
+    toast('⚠️ Token belum diaktifkan. Hubungi admin untuk mendapatkan kuota awal.', 6000);
+    return false;  // block until admin assigns tokens
+  }
   if (q.remaining <= 0 || q.pct >= 100) {
     // BLOCKED: quota exhausted
     if (typeof checkAndShowQuotaAlert === 'function') checkAndShowQuotaAlert(sess.email);
