@@ -5012,7 +5012,7 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
               <option value="name">Urut: Nama</option>
             </select>
             <button class="live-refresh-btn" id="liveRefreshBtn" onclick="liveForceRefresh()" title="Refresh sekarang">↻</button>
-            <span class="live-countdown" id="liveCountdown" title="Refresh berikutnya">5s</span>
+            <span class="live-countdown" id="liveCountdown" title="Refresh berikutnya">3s</span>
           </div>
 
           <!-- Grid kartu -->
@@ -6126,13 +6126,27 @@ async function livePresenceWrite() {
     localStorage.setItem('scholaris_sessions',JSON.stringify(all));
   } catch(e){}
 
-  // Kirim ke GAS async
-  if (_liveGASSupported!==false) {
+  // Kirim ke GAS async — FIX v10.3: retry-friendly, tidak permanently disable
+  if (typeof window._liveWriteFailCount === 'undefined') window._liveWriteFailCount = 0;
+  if (typeof window._liveWriteLastTry === 'undefined') window._liveWriteLastTry = 0;
+  var _wNow = Date.now();
+  var _shouldWrite = (_liveGASSupported !== false) ||
+                     (_wNow - window._liveWriteLastTry > 45000);  // retry every 45s
+
+  if (_shouldWrite) {
+    window._liveWriteLastTry = _wNow;
     try {
-      // FIX v10.2: 6s→12s untuk toleransi cold-start GAS
-      var result=await callGAS(payload,12000);
-      _liveGASSupported = !!(result&&result.success);
-    } catch(e) {}
+      var result = await callGAS(payload, 12000);
+      if (result && result.success) {
+        _liveGASSupported = true;
+        window._liveWriteFailCount = 0;
+      } else {
+        window._liveWriteFailCount++;
+      }
+    } catch (e) {
+      window._liveWriteFailCount++;
+      // JANGAN set _liveGASSupported = false — biarkan retry next cycle
+    }
   }
 }
 
@@ -6140,7 +6154,8 @@ async function livePresenceWrite() {
 function livePresenceStart() {
   livePresenceWrite().catch(function(){});
   if (_liveHBTimer) clearInterval(_liveHBTimer);
-  _liveHBTimer = setInterval(function(){ livePresenceWrite().catch(function(){}); }, 15000);
+  // FIX v10.3: 15s→8s untuk update cross-browser yang lebih cepat
+  _liveHBTimer = setInterval(function(){ livePresenceWrite().catch(function(){}); }, 8000);
 }
 
 // ── ENGINE: bersihkan saat logout ───────────────────────────
@@ -6158,23 +6173,64 @@ function livePresenceClear() {
 }
 
 // ══ ADMIN: Baca presence dari GAS ═══════════════════════════
+// FIX v10.3 — Cross-browser sync improvement:
+//   • _liveGASSupported tidak lagi PERMANEN false setelah 1 fail
+//   • Selalu coba GAS minimal 1× per 6 polling cycles (30 detik)
+//   • Merge dengan localStorage agar same-browser tabs juga muncul
 async function livePresenceRead() {
-  if (_liveGASSupported!==false) {
+  // Track failure count untuk auto-recovery
+  if (typeof window._liveGASFailCount === 'undefined') window._liveGASFailCount = 0;
+  if (typeof window._liveGASLastTry === 'undefined') window._liveGASLastTry = 0;
+
+  var _now = Date.now();
+  // FIX: Coba GAS jika: belum pernah gagal, ATAU sudah lewat 30 detik dari try terakhir
+  var _shouldTryGAS = (_liveGASSupported !== false) ||
+                      (_now - window._liveGASLastTry > 30000);
+
+  var _gasSessions = [];
+  if (_shouldTryGAS) {
+    window._liveGASLastTry = _now;
     try {
-      // FIX v10.2: 6s→15s untuk toleransi cold-start GAS
-      var result=await callGAS({
-        action:'presence_read',
-        adminKey:typeof adminKey!=='undefined'?adminKey:''
-      },15000);
-      if (result&&result.success&&result.presence) {
-        _liveGASSupported=true;
-        _livePresenceCache=result.presence;
-        return _buildLiveSessions(_livePresenceCache);
+      var result = await callGAS({
+        action: 'presence_read',
+        adminKey: typeof adminKey !== 'undefined' ? adminKey : ''
+      }, 15000);
+      if (result && result.success && result.presence) {
+        _liveGASSupported = true;
+        window._liveGASFailCount = 0;
+        _livePresenceCache = result.presence;
+        _gasSessions = _buildLiveSessions(_livePresenceCache);
+      } else {
+        window._liveGASFailCount++;
+        if (_liveGASSupported === null && window._liveGASFailCount >= 3) {
+          _liveGASSupported = false;
+          console.warn('[LiveMonitor] GAS presence_read tidak tersedia setelah 3× percobaan — fallback localStorage');
+        }
       }
-    } catch(e){}
-    if (_liveGASSupported===null) _liveGASSupported=false;
+    } catch (e) {
+      window._liveGASFailCount++;
+      console.warn('[LiveMonitor] GAS error #' + window._liveGASFailCount + ':', e.message);
+      // JANGAN set _liveGASSupported = false di sini — biarkan retry next cycle
+    }
   }
-  return getLiveSessionsLocal();
+
+  // Selalu merge dengan localStorage (untuk same-browser tabs)
+  var _localSessions = getLiveSessionsLocal();
+
+  // Merge: prefer GAS data jika ada, tapi tambahkan local-only sessions
+  if (_gasSessions.length > 0) {
+    var _gasEmails = {};
+    _gasSessions.forEach(function(s) {
+      if (s && s.email) _gasEmails[s.email.toLowerCase()] = true;
+    });
+    _localSessions.forEach(function(s) {
+      if (s && s.email && !_gasEmails[s.email.toLowerCase()]) {
+        _gasSessions.push(s);
+      }
+    });
+    return _sortSessions(_gasSessions);
+  }
+  return _localSessions;
 }
 
 // ── Build & sort list dari presence object ───────────────────
@@ -6233,14 +6289,16 @@ function startLiveMonitor() {
   _ensureNotifContainer();
   renderLiveSessions();
   if (_liveMonitorInterval) clearInterval(_liveMonitorInterval);
-  _liveCountdownSec=5;
+  // FIX v10.3: Polling 5s→3s untuk realtime feel + retry GAS yang lebih agresif
+  _liveCountdownSec=3;
   _startCountdown();
   _liveMonitorInterval=setInterval(function(){
-    _liveCountdownSec=5;
-    livePresenceRead().then(function(s){ _renderLiveCards(s); }).catch(function(){
+    _liveCountdownSec=3;
+    livePresenceRead().then(function(s){ _renderLiveCards(s); }).catch(function(_lpe){
+      console.warn('[LiveMonitor] poll error:', _lpe && _lpe.message);
       _renderLiveCards(getLiveSessionsLocal());
     });
-  },5000);
+  },3000);
 }
 
 function stopLiveMonitor() {
@@ -8674,21 +8732,38 @@ async function ensureBookRefPool_() {
 // ============================================================
 //
 // ┌──────────────────────────────────────────────────────────┐
-// │  v10.2 PATCH (TIMEOUT & TRUNCATION FIX)                  │
+// │  v10.3 PATCH (TRUNCATION + DOWNLOAD + LIVE MONITOR)      │
 // │  Audit oleh: Dr. Iskandar Z., M.Ag. — 2026               │
 // │                                                          │
-// │  FIX #1: Pesan timeout adaptif (detik/menit, no jargon) │
-// │          callGAS line 8930-8940                          │
-// │  FIX #2: Retry TIDAK halving max_tokens (cegah cutoff)  │
-// │          callGASWithRetry line 8950-8975                 │
-// │  FIX #3: Auto-continuation untuk segmen terpotong       │
-// │          runSegmentedGeneration line ~9740               │
-// │  FIX #4: Grok grounding skip untuk segmen >5500 kata    │
-// │          runGrokGroundingSegment + grokGroundText        │
-// │  FIX #5: Timeout admin dinaikkan untuk toleransi GAS    │
-// │          presence_read 6→15s, list_members 20→35s, dll  │
-// │  FIX #6: Konteks akumulatif 3K→6K, sliding 8K→16K       │
-// │  FIX #7: detectTruncation() helper baru                 │
+// │  ── Generation fixes ─────────────────────────────────  │
+// │  FIX A: lastOutput di-set PER-SEGMEN (bukan di akhir)   │
+// │         → tombol DOCX/Simpan SELALU bisa download       │
+// │         walau ada error setelahnya                       │
+// │  FIX B: Continuation block escape diperbaiki (\\n→\\n) │
+// │         → continuation prompt sekarang valid             │
+// │  FIX C: Defensive try/catch di sekitar:                 │
+// │         - detectTruncation                               │
+// │         - runGrokGroundingSegment                        │
+// │         - displayOutput partial                          │
+// │         - final assembly + countWords + updateStats     │
+// │  FIX D: Continuation 1× saja (bukan 2×) — hemat token  │
+// │  FIX E: Final assembly fallback manual loop bila crash  │
+// │                                                          │
+// │  ── Live Monitor fixes ──────────────────────────────  │
+// │  FIX F: _liveGASSupported tidak permanently false       │
+// │         → auto-recovery setiap 30 detik                  │
+// │  FIX G: Merge GAS + localStorage sessions               │
+// │         → same-browser tabs juga muncul                 │
+// │  FIX H: Polling 5s→3s, heartbeat 15s→8s                │
+// │         → realtime sync lebih cepat                      │
+// │                                                          │
+// │  ── v10.2 fixes (sudah aktif) ────────────────────────  │
+// │  Pesan timeout adaptif (detik/menit)                    │
+// │  Retry tidak halving max_tokens                         │
+// │  Grok grounding skip untuk segmen >5500 kata            │
+// │  Timeout admin: presence 15s, list 35s, token 20s       │
+// │  Konteks akumulatif 3K→6K, sliding 8K→16K               │
+// │  detectTruncation() helper                               │
 // └──────────────────────────────────────────────────────────┘
 // ============================================================
 
@@ -9753,41 +9828,48 @@ async function runSegmentedGeneration(mode, model, lang, citeStyle, temp, title,
       }
 
       // ════════════════════════════════════════════════════════════════
-      // FIX v10.2 — AUTO-CONTINUATION untuk segmen yang terpotong
-      // Mendeteksi truncation dan otomatis melakukan continuation call
-      // hingga 2 kali sampai segmen utuh atau target tercapai.
+      // FIX v10.3 — AUTO-CONTINUATION (escape-fixed) + DOWNLOAD SAFETY
+      //
+      // Perbaikan dari v10.2:
+      //   • Escape \n dan \s+ yang sebelumnya double-escaped (literal \\n)
+      //   • lastOutput di-set per-segmen sehingga DOCX/Save selalu berfungsi
+      //     bahkan jika ada error di akhir generation
+      //   • Defensive try/catch di sekitar continuation loop
+      //   • Continuation hanya 1× (bukan 2×) untuk hemat token & cegah loop
       // ════════════════════════════════════════════════════════════════
       var _segContent = result.content;
-      var _truncCheck = detectTruncation(_segContent, seg.targetWords);
-      var _contAttempts = 0;
-      var _maxContAttempts = 2;
+      var _truncCheck;
+      try {
+        _truncCheck = detectTruncation(_segContent, seg.targetWords);
+      } catch (_dErr) {
+        console.warn('[detectTruncation] error:', _dErr.message);
+        _truncCheck = { truncated: false, reason: 'detect-error' };
+      }
 
-      while (_truncCheck.truncated && _contAttempts < _maxContAttempts && !generationAborted) {
-        _contAttempts++;
+      if (_truncCheck.truncated && !generationAborted) {
         console.warn('[Auto-Continuation] Segmen "' + seg.label + '" terdeteksi terpotong: ' +
-                     _truncCheck.reason + ' — mencoba continuation #' + _contAttempts);
+                     _truncCheck.reason + ' — mencoba continuation 1×');
         if (typeof toast === 'function') {
-          toast('🔄 Segmen ' + (i+1) + ' terpotong — melanjutkan otomatis (' +
-                _contAttempts + '/' + _maxContAttempts + ')...', 4000);
+          toast('🔄 Segmen ' + (i+1) + ' terpotong — melanjutkan otomatis...', 4000);
         }
-        // Ambil 1500 char terakhir sebagai anchor continuation
-        var _tailAnchor = _segContent.slice(-1500);
-        var _contUserPrompt =
-          'Ini adalah continuation dari segmen yang TERPOTONG. ' +
-          'Lanjutkan teks PERSIS dari titik berhenti — JANGAN mengulang konten yang sudah ditulis.\\n\\n' +
-          'TEKS YANG SUDAH DITULIS (1500 char terakhir, untuk konteks):\\n' +
-          '------ AKHIR TEKS ------\\n' +
-          _tailAnchor + '\\n' +
-          '------ LANJUTKAN DARI SINI ------\\n\\n' +
-          'TUGAS:\\n' +
-          '1. Mulai DARI kata berikutnya setelah teks akhir di atas.\\n' +
-          '2. JANGAN salin ulang teks yang sudah ada.\\n' +
-          '3. JANGAN tambahkan heading "Lanjutan" atau pembatas.\\n' +
-          '4. Selesaikan bagian "' + seg.label + '" sampai TUNTAS dan koheren.\\n' +
-          '5. Akhiri dengan kalimat lengkap (titik/!?).\\n' +
-          '6. Target tambahan: minimum ' + Math.max(800, Math.floor(seg.targetWords/3)) + ' kata.';
-
         try {
+          // Anchor 1500 char terakhir — escape benar pakai \n bukan \\n
+          var _tailAnchor = _segContent.slice(-1500);
+          var _contUserPrompt =
+            'Ini adalah continuation dari segmen yang TERPOTONG. ' +
+            'Lanjutkan teks PERSIS dari titik berhenti — JANGAN mengulang konten.\n\n' +
+            'TEKS YANG SUDAH DITULIS (1500 char terakhir, untuk konteks):\n' +
+            '------ AKHIR TEKS ------\n' +
+            _tailAnchor + '\n' +
+            '------ LANJUTKAN DARI SINI ------\n\n' +
+            'TUGAS:\n' +
+            '1. Mulai DARI kata berikutnya setelah teks akhir di atas.\n' +
+            '2. JANGAN salin ulang teks yang sudah ada.\n' +
+            '3. JANGAN tambahkan heading "Lanjutan" atau pembatas.\n' +
+            '4. Selesaikan bagian "' + seg.label + '" sampai TUNTAS dan koheren.\n' +
+            '5. Akhiri dengan kalimat lengkap (titik/!?).\n' +
+            '6. Target tambahan: minimum ' + Math.max(800, Math.floor(seg.targetWords/3)) + ' kata.';
+
           var _contResult = await callGASWithRetry({
             action    : 'ai_write',
             model     : model,
@@ -9798,45 +9880,69 @@ async function runSegmentedGeneration(mode, model, lang, citeStyle, temp, title,
           }, 320000, fallbackModel);
 
           if (_contResult && _contResult.success && _contResult.content) {
-            // Gabungkan: hilangkan duplikat di sambungan jika ada overlap kecil
-            var _contText = _contResult.content.trim();
-            // Hilangkan prefix yang mungkin diulang (cek 50 char pertama vs anchor)
+            var _contText = String(_contResult.content || '').trim();
+            // Strip duplicate prefix jika ada (escape benar pakai \s)
             var _anchorEnd = _tailAnchor.slice(-100).trim();
             if (_anchorEnd.length > 30 && _contText.indexOf(_anchorEnd.slice(0, 50)) === 0) {
               _contText = _contText.slice(_anchorEnd.length).trim();
             }
-            _segContent = _segContent + (_segContent.endsWith(' ') || _segContent.endsWith('\\n') ? '' : ' ') + _contText;
-            _truncCheck = detectTruncation(_segContent, seg.targetWords);
-            console.log('[Auto-Continuation] #' + _contAttempts + ' selesai. Total kata sekarang: ' +
-                       _segContent.trim().split(/\\s+/).length + ' | Status: ' + _truncCheck.reason);
-          } else {
-            console.warn('[Auto-Continuation] #' + _contAttempts + ' gagal — berhenti.');
-            break;
+            // Gabungkan dengan separator yang aman
+            var _sep = (/[\s\n]$/.test(_segContent)) ? '' : ' ';
+            _segContent = _segContent + _sep + _contText;
+            console.log('[Auto-Continuation] selesai. Total kata sekarang ~' +
+                        _segContent.trim().split(/\s+/).length);
           }
         } catch (_ce) {
-          console.warn('[Auto-Continuation] #' + _contAttempts + ' error:', _ce.message);
-          break;
+          console.warn('[Auto-Continuation] error (non-fatal):', _ce.message);
+          // Lanjut dengan _segContent apa adanya — jangan throw
         }
       }
 
-      if (_truncCheck.truncated && typeof toast === 'function') {
-        toast('⚠️ Segmen ' + (i+1) + ' (' + seg.label + ') mungkin masih kurang sempurna. ' +
-              'Klik tombol regenerate jika perlu.', 6000);
+      // ── Grok 4.20 Empirical Grounding — per segment (try/catch wrapper) ───
+      var _segGrounded = _segContent;
+      try {
+        _segGrounded = await runGrokGroundingSegment(_segContent, title, lang, citeStyle, seg.label);
+      } catch (_gErr) {
+        console.warn('[Grok Grounding Segment] error (non-fatal):', _gErr.message);
+        _segGrounded = _segContent;  // Fallback ke teks asli
       }
 
-      // ── Grok 4.20 Empirical Grounding — per segment ─────────────
-      const _segGrounded = await runGrokGroundingSegment(_segContent, title, lang, citeStyle, seg.label);
       sectionOutputs.push({ label: seg.label, content: _segGrounded, words: countWords(_segGrounded) });
       // Konteks akumulatif untuk koherensi (16K char terakhir)
       accumulatedContext = (accumulatedContext + '\n\n' + _segGrounded).slice(-16000);
       updateProgressStep(i, 'done');
 
-      // Tampilkan partial result real-time — semua segmen sejauh ini
-      const partialDoc = sectionOutputs.map(s => s.content).join('\n\n---\n\n');
-      displayOutput(partialDoc, 'outputArea', 'outputCard');
-      const wcNow = countWords(partialDoc);
-      document.getElementById('wordCount').textContent =
-        wcNow.toLocaleString() + ' kata · Segmen ' + (i+1) + '/' + segments.length + ' selesai';
+      // ════════════════════════════════════════════════════════════════
+      // FIX v10.3 CRITICAL — Set lastOutput PER-SEGMEN
+      // Ini menjamin tombol DOCX/Simpan SELALU bisa download konten
+      // walaupun ada crash di langkah berikutnya. Setiap segmen yang
+      // berhasil langsung tersimpan di lastOutput.
+      // ════════════════════════════════════════════════════════════════
+      try {
+        const _partialForSave = sectionOutputs
+          .filter(s => s.content)
+          .map(s => s.content)
+          .join('\n\n');
+        if (typeof lastOutput !== 'undefined') {
+          lastOutput = _partialForSave;
+        } else {
+          window.lastOutput = _partialForSave;
+        }
+      } catch (_saveErr) {
+        console.warn('[lastOutput per-segment] error:', _saveErr.message);
+      }
+
+      // Tampilkan partial result real-time — defensive try/catch
+      try {
+        const partialDoc = sectionOutputs.map(s => s.content).join('\n\n---\n\n');
+        displayOutput(partialDoc, 'outputArea', 'outputCard');
+        const wcNow = countWords(partialDoc);
+        var _wcEl = document.getElementById('wordCount');
+        if (_wcEl) _wcEl.textContent = wcNow.toLocaleString() +
+          ' kata · Segmen ' + (i+1) + '/' + segments.length + ' selesai';
+      } catch (_dispErr) {
+        console.warn('[displayOutput partial] error (non-fatal):', _dispErr.message);
+      }
 
     } catch (e) {
       // Strategi: tandai gagal tapi LANJUTKAN segmen berikutnya
@@ -9852,10 +9958,43 @@ async function runSegmentedGeneration(mode, model, lang, citeStyle, temp, title,
     }
   }
 
-  // Assemble final document — dokumen utuh semua segmen
-  const finalDoc = sectionOutputs.filter(s => s.content).map(s => s.content).join('\n\n');
-  const finalWC = countWords(finalDoc);
-  document.getElementById('wordCount').textContent = finalWC.toLocaleString() + ' kata · ' + sectionOutputs.length + ' segmen selesai ✓';
+  // ════════════════════════════════════════════════════════════════
+  // FIX v10.3 — Final assembly dengan defensive try/catch
+  // Jika error terjadi di sini, kita masih return content terakhir
+  // yang valid dari per-segment lastOutput.
+  // ════════════════════════════════════════════════════════════════
+  var finalDoc = '';
+  try {
+    finalDoc = sectionOutputs.filter(s => s.content).map(s => s.content).join('\n\n');
+  } catch (_aErr) {
+    console.warn('[Final Assembly] error — fallback:', _aErr.message);
+    // Fallback manual loop jika filter/map crash
+    for (var _ai = 0; _ai < sectionOutputs.length; _ai++) {
+      try {
+        if (sectionOutputs[_ai] && sectionOutputs[_ai].content) {
+          finalDoc += (finalDoc ? '\n\n' : '') + sectionOutputs[_ai].content;
+        }
+      } catch (_a2) {}
+    }
+  }
+
+  try {
+    var finalWC = countWords(finalDoc);
+    var _wcEl2 = document.getElementById('wordCount');
+    if (_wcEl2) _wcEl2.textContent = finalWC.toLocaleString() + ' kata · ' +
+      sectionOutputs.length + ' segmen selesai ✓';
+  } catch (_wErr) {
+    console.warn('[Final wordCount] error:', _wErr.message);
+  }
+
+  // Final lastOutput safety net
+  try {
+    if (typeof lastOutput !== 'undefined') lastOutput = finalDoc;
+    else window.lastOutput = finalDoc;
+  } catch (_lErr) {
+    window.lastOutput = finalDoc;
+  }
+
   return { content: finalDoc, segments: sectionOutputs };
 }
 
@@ -10620,9 +10759,15 @@ async function generateWriting() {
       }
     } else if (SEGMENTED_MODES.has(mode)) {
       const result = await runSegmentedGeneration(mode, model, lang, cite, temp, title, instructions, refContext);
-      lastOutput = result.content;
-      displayOutput(result.content, 'outputArea', 'outputCard');
-      updateStats(result.content, model);
+      // FIX v10.3: lastOutput sudah di-set per-segmen dalam runSegmentedGeneration.
+      // Di sini kita hanya pastikan nilai final dan jalankan side-effects defensif.
+      try { lastOutput = result.content; } catch(_le) { window.lastOutput = result.content; }
+      try { displayOutput(result.content, 'outputArea', 'outputCard'); } catch(_de) {
+        console.warn('[displayOutput final] error:', _de.message);
+      }
+      try { updateStats(result.content, model); } catch(_ue) {
+        console.warn('[updateStats final] error:', _ue.message);
+      }
     } else {
       setStatus('Generating dengan referensi terverifikasi...');
       const content = await generateSinglePass(mode, model, lang, cite, temp, title, instructions, refContext);
@@ -10803,8 +10948,14 @@ async function generateWithRefs() {
       }
     } else if (SEGMENTED_MODES.has(mode)) {
       const result = await runSegmentedGeneration(mode,model,lang,cite,temp,title,instructions,refContext);
-      lastOutput = result.content; displayOutput(result.content,'outputArea','outputCard');
-      updateStats(result.content,model);
+      // FIX v10.3: defensive try/catch — lastOutput sudah di-set per-segmen
+      try { lastOutput = result.content; } catch(_le2) { window.lastOutput = result.content; }
+      try { displayOutput(result.content,'outputArea','outputCard'); } catch(_de2) {
+        console.warn('[displayOutput final-refs] error:', _de2.message);
+      }
+      try { updateStats(result.content,model); } catch(_ue2) {
+        console.warn('[updateStats final-refs] error:', _ue2.message);
+      }
     } else {
       const content = await generateSinglePass(mode,model,lang,cite,temp,title,instructions,refContext);
       lastOutput = content; displayOutput(content,'outputArea','outputCard');
