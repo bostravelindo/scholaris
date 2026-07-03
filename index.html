@@ -4027,6 +4027,7 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
               <div id="condenseCustomWrap" style="display:none;flex-shrink:0;">
                 <label style="font-size:.7rem;color:#a5b4fc;display:block;margin-bottom:3px;">Target kata</label>
                 <input type="number" id="condenseCustomWords" min="10" max="50000" placeholder="mis. 500"
+                  oninput="updateCondenseCustomInfo(this)"
                   style="width:100px;padding:5px 8px;background:rgba(255,255,255,.06);border:1px solid rgba(99,102,241,.35);border-radius:6px;color:#e2e8f0;font-size:.82rem;font-family:monospace;outline:none;">
               </div>
             </div>
@@ -9207,6 +9208,726 @@ function clampMaxTokens(model, requestedTokens) {
 }
 
 // ════════════════════════════════════════════════════════════════════
+// KONDENSASI — Target-Length Engine (Paraphraser "Kondensasi" mode)
+// ────────────────────────────────────────────────────────────────────
+// Menyediakan perhitungan target kata yang presisi, konsisten, dan aman
+// terhadap kapasitas output model, agar hasil kondensasi TIDAK PERNAH
+// terpotong dan SELALU menghormati pilihan user (preset % atau custom).
+// ════════════════════════════════════════════════════════════════════
+
+// Rasio token per kata untuk estimasi max_tokens yang dibutuhkan.
+// Teks akademis Bahasa Indonesia cenderung lebih token-dense (imbuhan,
+// istilah serapan, tanda baca kutipan) dibanding Inggris → rasio lebih besar.
+function condenseTokenRatio(lang) {
+  return (lang === 'id') ? 1.9 : 1.5;
+}
+
+// Estimasi max_tokens yang dibutuhkan agar output sepanjang `words` kata
+// TIDAK terpotong, dengan buffer aman untuk kalimat penutup & markdown.
+function estimateTokensFromWords(words, lang) {
+  var ratio = condenseTokenRatio(lang);
+  return Math.ceil((words || 0) * ratio) + 300;
+}
+
+// Hitung target kata final untuk mode Kondensasi.
+// FIX KRITIS: sebelumnya `parseInt('custom') || 50` selalu menghasilkan 50
+// SEBELUM sempat dicek isNaN() → cabang custom tidak pernah tereksekusi,
+// nilai custom user diabaikan total. Diperbaiki dengan pengecekan string
+// 'custom' secara langsung, bukan lewat konversi angka yang menyesatkan.
+//
+// Juga menjaga 2 invarian penting agar hasil selalu presisi & tidak terpotong:
+//   (a) target TIDAK BOLEH ≥ panjang teks asli (kontradiktif dgn "kondensasi")
+//   (b) target TIDAK BOLEH melebihi kapasitas output model yang dipilih
+function computeCondenseTarget(text, model, lang) {
+  var inputWords = countWords(text);
+  var pctEl  = document.querySelector('.condense-preset.active');
+  var pctRaw = pctEl ? pctEl.dataset.pct : '50';
+  var targetWords, label;
+
+  if (pctRaw === 'custom') {
+    var customEl  = document.getElementById('condenseCustomWords');
+    var customVal = customEl ? parseInt(customEl.value, 10) : NaN;
+    if (isNaN(customVal) || customVal < 10) {
+      // Fallback aman jika field custom kosong/invalid — jangan diam-diam
+      // memakai 50% tanpa memberi tahu user (beda dgn bug lama).
+      targetWords = Math.max(10, Math.round(inputWords * 0.5));
+      label = 'custom-kosong→fallback 50%';
+    } else {
+      targetWords = customVal;
+      label = 'custom (' + customVal + ' kata)';
+    }
+  } else {
+    var pct = parseInt(pctRaw, 10) || 50;
+    targetWords = Math.round(inputWords * pct / 100);
+    label = pct + '%';
+  }
+
+  var clamped = false, clampReasons = [];
+
+  // Guard (a): target tidak boleh ≥ panjang asli
+  if (inputWords > 0 && targetWords >= inputWords) {
+    targetWords = Math.max(10, Math.round(inputWords * 0.9));
+    clamped = true;
+    clampReasons.push('target ≥ panjang teks asli');
+  }
+
+  // Guard (b): target tidak boleh melebihi kapasitas MULTI-CHUNK sistem.
+  // FIX v14: sebelumnya guard ini membatasi target ke kapasitas SATU KALI
+  // panggilan AI (mis. ~8.263 kata untuk Gemini) — padahal sejak v12 sistem
+  // sudah mendukung chunking multi-panggilan untuk target besar. Guard lama
+  // secara tidak sengaja menegasikan manfaat chunking untuk dokumen sangat
+  // panjang. Sekarang batas dihitung dari kapasitas GABUNGAN maksimum chunk
+  // (CONDENSE_MAX_CHUNKS × CONDENSE_CHUNK_TARGET_WORDS), jauh lebih besar.
+  var hardCapTok = MODEL_TOKEN_HARD_LIMIT[model] || MODEL_TOKENS[model] || 8000;
+  var ratio = condenseTokenRatio(lang);
+  var singleCallCapWords = Math.max(10, Math.floor((hardCapTok - 300) / ratio));
+  var multiChunkCapWords = (typeof CONDENSE_MAX_CHUNKS !== 'undefined' && typeof CONDENSE_CHUNK_TARGET_WORDS !== 'undefined')
+    ? CONDENSE_MAX_CHUNKS * CONDENSE_CHUNK_TARGET_WORDS
+    : singleCallCapWords;
+  var maxWordsForModel = Math.max(singleCallCapWords, multiChunkCapWords);
+  if (targetWords > maxWordsForModel) {
+    targetWords = maxWordsForModel;
+    clamped = true;
+    clampReasons.push('melebihi kapasitas maksimum sistem (' + maxWordsForModel.toLocaleString('id-ID') + ' kata, ' + CONDENSE_MAX_CHUNKS + ' bagian × ' + CONDENSE_CHUNK_TARGET_WORDS + ' kata/bagian)');
+  }
+
+  targetWords = Math.max(10, targetWords);
+
+  return {
+    targetWords : targetWords,
+    inputWords  : inputWords,
+    label       : label,
+    clamped     : clamped,
+    clampReason : clampReasons.join('; ')
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════
+// KONDENSASI — Chunked Generation + Multi-Round Continuation (FIX v13)
+// ────────────────────────────────────────────────────────────────────
+// FIX v13 — ROOT CAUSE dari laporan "naskah kacau/kata pecah" setelah v12:
+// saat detectTruncation() mendeteksi teks berhenti DI TENGAH KATA (bukan
+// di tengah kalimat), continuation lama mengambil 1200 karakter terakhir
+// APA ADANYA (bisa berakhir di tengah kata, mis. "...kolekt") lalu
+// menyambungnya dengan SPASI PAKSA ke hasil lanjutan model — menghasilkan
+// kata pecah seperti "kolekt if", "menjin akkan", "ap olitis". Deduplikasi
+// lama juga memotong persis 80 karakter tanpa verifikasi kecocokan penuh,
+// berisiko memotong tengah kata pada teks yang BUKAN duplikat.
+//
+// Perbaikan v13:
+//   1. trimTrailingPartialWord() — SEBELUM setiap ronde continuation,
+//      buang fragmen kata terakhir yang tidak utuh, sehingga konteks yang
+//      dikirim ke model SELALU berakhir di batas kata yang bersih.
+//   2. Penggabungan hasil SELALU pakai 1 spasi tunggal (aman, karena sisi
+//      kiri sudah dipastikan berakhir bersih di langkah 1).
+//   3. stripOverlap() — deduplikasi berbasis PENCOCOKAN PERSIS terpanjang
+//      antara ekor konteks & awal hasil lanjutan (bukan tebakan panjang
+//      tetap), sehingga tidak pernah memotong teks yang bukan duplikat.
+// ════════════════════════════════════════════════════════════════════
+
+// Target kata maksimum per panggilan AI — FIX v15: dinaikkan dari 1200 ke 2200.
+// Root cause laporan "kadang error pindah model, kadang hasil cuma 3-4 halaman"
+// pada target besar (70%): dengan 1200 kata/chunk, dokumen 60+ halaman butuh
+// hingga 12 chunk × 4 ronde = 48 panggilan API BERURUTAN — durasi total sangat
+// lama & rawan terkena rate-limit/timeout transien di tengah jalan (satu
+// kegagalan = seluruh proses gagal, lihat FIX v15 di _condenseGenerateComplete
+// & doParaphrase). Karena regenerasi-dari-sumber (v14) sudah menjaga akurasi
+// panjang, chunk boleh diperbesar untuk memangkas jumlah panggilan total.
+var CONDENSE_CHUNK_TARGET_WORDS = 2200;
+// Batas maksimum jumlah chunk — dengan target 2200 kata/chunk, ini mendukung
+// hingga ~33.000 kata target kondensasi (dokumen sumber ratusan halaman).
+var CONDENSE_MAX_CHUNKS = 15;
+// FIX v15 — Resiliensi panggilan API: retry otomatis dengan backoff untuk
+// error TRANSIEN (timeout/rate-limit/5xx/jaringan), dan jeda antar-chunk
+// untuk menghindari rate-limit akibat permintaan beruntun terlalu cepat.
+var CONDENSE_CALL_RETRY_MAX = 2;
+var CONDENSE_CALL_RETRY_DELAY_MS = 2500;
+var CONDENSE_INTER_CHUNK_DELAY_MS = 700;
+// FIX v17 — Ambang kata di mana teks TANPA heading pun tetap dirutekan ke
+// mesin terstruktur (section-aware) agar dokumen panjang tidak terpotong pada
+// satu kali panggilan. Teks pendek tanpa heading tetap memakai jalur 1x panggilan
+// (perilaku lama, nol regresi). Teks BER-HEADING selalu memakai mesin terstruktur.
+var STRUCTURED_LONGDOC_MIN_WORDS = 1200;
+
+// Karakter yang dianggap bagian dari "kata" untuk bahasa Indonesia/Arab-transliterasi
+// akademis (termasuk diakritik Latin & transliterasi Arab seperti ā, ī, ū, ḥ, ṣ, ẓ, ʿ, ʾ).
+var _CONDENSE_WORD_CHAR_RE = /[A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỿ0-9'’-]/;
+
+// Buang fragmen kata terakhir yang TIDAK UTUH di ujung teks, agar batas
+// yang dikirim sebagai konteks continuation selalu berupa kata yang bersih
+// (mencegah kata pecah seperti "kolekt if" saat disambung dengan lanjutan).
+function trimTrailingPartialWord(text) {
+  if (!text) return text;
+  var t = text.replace(/\s+$/, '');
+  if (!t) return t;
+  var lastChar = t.slice(-1);
+  if (!_CONDENSE_WORD_CHAR_RE.test(lastChar)) return t; // sudah berakhir di tanda baca/simbol — aman
+  var idx = t.length;
+  while (idx > 0 && _CONDENSE_WORD_CHAR_RE.test(t[idx - 1])) idx--;
+  var lastWord = t.slice(idx);
+  // Hanya pangkas jika fragmen wajar sebagai "sisa kata terpotong" (dibatasi
+  // panjang agar tidak salah memangkas kata utuh yang memang panjang).
+  if (lastWord.length > 0 && lastWord.length <= 25 && idx > 0) {
+    return t.slice(0, idx).replace(/\s+$/, '');
+  }
+  return t;
+}
+
+// Deduplikasi presisi: cari overlap PERSIS terpanjang antara ekor `tail`
+// dan awal `contText` (model kadang mengulang sebagian konteks yang
+// diberikan). Dicoba dari panjang terbesar ke terkecil agar match paling
+// presisi ditemukan lebih dulu — TIDAK PERNAH memotong teks yang bukan
+// duplikat karena mensyaratkan kecocokan karakter persis, bukan tebakan.
+function stripOverlap(tail, contText) {
+  var maxLen = Math.min(150, tail.length, contText.length);
+  for (var len = maxLen; len >= 15; len--) {
+    if (contText.slice(0, len) === tail.slice(-len)) {
+      return contText.slice(len).trim();
+    }
+  }
+  return contText;
+}
+
+// Generate 1 unit teks (teks utuh ATAU 1 chunk) hingga TUNTAS.
+// Melempar error hanya jika PANGGILAN PERTAMA gagal total (tidak ada
+// konten sama sekali) — ronde continuation yang gagal tidak melempar
+// error, cukup dihentikan dan hasil sejauh ini diamankan lewat
+// trimToLastCompleteSentence().
+// FIX v15 — Panggilan GAS dengan retry otomatis + backoff untuk error TRANSIEN
+// (timeout, rate-limit/429, error server 5xx, gangguan jaringan). Root cause
+// laporan "kadang muncul pesan tidak bisa lanjut, disuruh pindah model": pada
+// target besar, pipeline melakukan puluhan panggilan API berurutan — SATU
+// kegagalan transien di tengah jalan (sangat mungkin terjadi pada rantai
+// sepanjang itu) dulu langsung menggagalkan SELURUH proses kondensasi tanpa
+// ada percobaan ulang. Sekarang setiap panggilan diberi kesempatan retry
+// dengan jeda meningkat sebelum benar-benar dianggap gagal.
+async function _condenseCallWithRetry(payload, label) {
+  var lastErr = null;
+  for (var attempt = 0; attempt <= CONDENSE_CALL_RETRY_MAX; attempt++) {
+    try {
+      var res = await callGAS(payload, 320000);
+      if (res && res.success) return res;
+      lastErr = new Error(res ? (res.error || 'API error') : 'Tidak ada respons dari server');
+    } catch (e) {
+      lastErr = e;
+    }
+    if (attempt < CONDENSE_CALL_RETRY_MAX) {
+      var delay = CONDENSE_CALL_RETRY_DELAY_MS * (attempt + 1);
+      console.warn('[Kondensasi] ' + (label || 'Panggilan API') + ' gagal (percobaan ' + (attempt + 1) + '/' +
+        (CONDENSE_CALL_RETRY_MAX + 1) + '): ' + (lastErr.message || lastErr) + ' — mencoba lagi dalam ' + (delay / 1000) + 'd');
+      await new Promise(function (r) { setTimeout(r, delay); });
+    }
+  }
+  throw lastErr || new Error('Gagal setelah ' + (CONDENSE_CALL_RETRY_MAX + 1) + ' percobaan');
+}
+
+async function _condenseGenerateComplete(userPrompt, targetWords, systemPrompt, model, temperature, lang) {
+  var maxTok = clampMaxTokens(model, estimateTokensFromWords(targetWords, lang));
+  var result = await _condenseCallWithRetry({
+    action: 'ai_write', model: model, system: systemPrompt,
+    messages: [{ role: 'user', content: userPrompt }],
+    temperature: temperature, max_tokens: maxTok
+  }, 'Generasi utama');
+
+  if (!result || !result.success) {
+    throw new Error(result ? (result.error || 'API error') : 'Tidak ada respons dari server');
+  }
+  var content = (result.content || '').trim();
+  if (!content) throw new Error('Server AI tidak menghasilkan teks. Coba model atau mode lain.');
+
+  var rounds = 0, MAX_ROUNDS = 3;
+  while (rounds < MAX_ROUNDS) {
+    var trunc;
+    try { trunc = detectTruncation(content, targetWords); }
+    catch (_e) { trunc = { truncated: false, reason: 'detect-error' }; }
+    if (!trunc.truncated) break;
+
+    rounds++;
+    console.warn('[Kondensasi] Terdeteksi bermasalah (ronde ' + rounds + '/' + MAX_ROUNDS + '): ' + trunc.reason);
+
+    // FIX v14 — ROOT CAUSE dari laporan "60 halaman jadi 4 halaman" (825/5942 kata,
+    // hanya 13,9% dari target): detectTruncation MEMANG sudah benar mendeteksi kasus
+    // ini lewat reason 'word-count-low' — tapi mekanisme lama SALAH menanganinya:
+    // ia meminta model "melanjutkan dari titik berhenti", padahal teks TIDAK berhenti
+    // di tengah — secara tata bahasa ia sudah "selesai" (model menyerah terlalu dini
+    // dan menutup kalimat dengan rapi jauh sebelum mencapai target). Akibatnya model
+    // hanya menambah 1-2 kalimat penutup, BUKAN benar-benar memperluas cakupan.
+    //
+    // Perbaikan: bedakan 2 kelas masalah secara eksplisit —
+    //   (a) 'word-count-low'  → REGENERASI PENUH dari sumber asli + feedback
+    //       eksplisit kesenjangan kata (bukan continuation dari ekor teks).
+    //   (b) cutoff tengah kalimat/kata → tetap pakai continuation dari ekor teks (v13).
+    var isLengthIssue = /word-count-low/.test(trunc.reason || '');
+
+    if (isLengthIssue) {
+      try {
+        var achieved = countWords(content);
+        var retryPrompt = userPrompt +
+          '\n\n[PERINGATAN — WAJIB DIPATUHI] Percobaan sebelumnya HANYA menghasilkan sekitar ' +
+          achieved + ' kata — JAUH di bawah target ' + targetWords + ' kata yang diminta (pencapaian ' +
+          'hanya ' + Math.round(achieved / targetWords * 100) + '%). Ini BUKAN tugas meringkas singkat — ' +
+          'ini KONDENSASI PROPORSIONAL yang WAJIB mempertahankan porsi substansial dari detail, argumen, ' +
+          'data, dan contoh pada teks asli di atas. JANGAN hanya mengambil beberapa poin utama lalu ' +
+          'berhenti — proses SETIAP bagian/paragraf dari teks asli secara proporsional dan menyeluruh, ' +
+          'dari awal hingga akhir teks sumber, tanpa melompati bagian manapun. Tulis ULANG dari awal ' +
+          'dengan cakupan yang jauh lebih menyeluruh, memastikan hasil akhir mendekati ' + targetWords + ' kata.';
+
+        var retryResult = await _condenseCallWithRetry({
+          action: 'ai_write', model: model, system: systemPrompt,
+          messages: [{ role: 'user', content: retryPrompt }],
+          temperature: temperature, max_tokens: maxTok
+        }, 'Regenerasi (kata kurang)');
+
+        if (retryResult && retryResult.success && retryResult.content) {
+          var retryContent = String(retryResult.content || '').trim();
+          // Hanya pakai hasil regenerasi jika BENAR-BENAR lebih baik (lebih panjang) —
+          // jangan pernah menggantikan dengan hasil yang lebih pendek/lebih buruk.
+          if (countWords(retryContent) > achieved) {
+            content = retryContent;
+          } else {
+            console.warn('[Kondensasi] Regenerasi tidak lebih baik (' + countWords(retryContent) + ' kata) — pertahankan hasil sebelumnya.');
+          }
+        }
+      } catch (_re) {
+        console.warn('[Kondensasi regenerate] error (non-fatal), stop looping:', _re.message);
+        break;
+      }
+      continue; // langsung cek ulang di iterasi berikutnya (bisa jadi masih perlu continuation biasa)
+    }
+
+    // FIX v13: pastikan `content` berakhir di batas kata yang bersih SEBELUM
+    // membangun konteks continuation — inilah yang mencegah kata pecah.
+    content = trimTrailingPartialWord(content);
+
+    try {
+      var tail = content.slice(-1200);
+      var contPrompt =
+        'Ini adalah lanjutan dari teks KONDENSASI akademis yang TERPOTONG. ' +
+        'Lanjutkan PERSIS dari titik berhenti — JANGAN mengulang konten yang sudah ditulis, ' +
+        'JANGAN menambah heading atau pembatas seperti "Lanjutan:". Teks di bawah SELALU ' +
+        'berakhir di batas kata yang utuh (bukan tengah kata), jadi mulai lanjutanmu sebagai ' +
+        'KATA BARU, dipisah spasi secara alami seperti menyambung kalimat biasa.\n\n' +
+        '------ AKHIR TEKS YANG SUDAH ADA (1200 karakter terakhir, untuk konteks) ------\n' +
+        tail + '\n------ LANJUTKAN TEPAT DARI SINI ------\n\n' +
+        'TUGAS:\n1. Mulai dengan kata baru setelah teks di atas (JANGAN sambung sebagai satu kata).\n' +
+        '2. Selesaikan hingga TUNTAS dan koheren.\n' +
+        '3. Akhiri dengan kalimat lengkap (diakhiri tanda titik/!/?).\n' +
+        '4. Output HANYA teks lanjutannya, tanpa penjelasan atau preamble.';
+
+      var contMaxTok = clampMaxTokens(model, estimateTokensFromWords(Math.max(300, Math.round(targetWords * 0.4)), lang));
+      var contResult = await _condenseCallWithRetry({
+        action: 'ai_write', model: model, system: systemPrompt,
+        messages: [{ role: 'user', content: contPrompt }],
+        temperature: temperature, max_tokens: contMaxTok
+      }, 'Continuation');
+
+      if (!contResult || !contResult.success || !contResult.content) break;
+      var contText = stripOverlap(tail, String(contResult.content || '').trim());
+      if (!contText) break; // hasil lanjutan sepenuhnya duplikat — hentikan agar tidak mengulang
+      // FIX v13: `content` sudah dipastikan berakhir di batas kata bersih (langkah di atas),
+      // sehingga penggabungan dengan SATU spasi tunggal selalu aman & tidak pernah memecah kata.
+      content = content + ' ' + contText;
+    } catch (_ce) {
+      console.warn('[Kondensasi continuation] error (non-fatal), stop looping:', _ce.message);
+      break;
+    }
+  }
+
+  // Jaring pengaman terakhir — pastikan TIDAK PERNAH berhenti di tengah kalimat,
+  // bahkan jika 4 ronde continuation tetap tidak menuntaskan teks.
+  var finalCheck;
+  try { finalCheck = detectTruncation(content, targetWords); }
+  catch (_e) { finalCheck = { truncated: false }; }
+  if (finalCheck.truncated) {
+    var trimmed = trimToLastCompleteSentence(content);
+    if (trimmed !== content) {
+      console.warn('[Kondensasi] Masih terpotong setelah ' + MAX_ROUNDS + ' ronde — dipangkas ke kalimat lengkap terakhir.');
+    }
+    content = trimmed;
+  }
+  return content;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// KONDENSASI — Pelestarian Struktur BAB/Subbab (FIX v16)
+// ────────────────────────────────────────────────────────────────────
+// ROOT CAUSE: hasil kondensasi sebelumnya menjadi satu blok prosa tanpa
+// struktur sama sekali (0 heading BAB/subbab tersisa di hasil, dicek
+// langsung pada dokumen ekspor) — karena (a) prompt lama secara eksplisit
+// melarang "segment labels" tanpa membedakan heading ASLI dari sekadar
+// label buatan chunking, dan (b) tidak ada sinyal eksplisit ke model AI
+// mana baris yang merupakan judul BAB/subbab struktural dari dokumen
+// sumber vs. kalimat prosa biasa — sehingga model ikut memadatkan/
+// menghapus heading bersama isinya.
+//
+// Solusi: baris yang cocok pola heading akademik (BAB, penomoran subbab
+// "1.1 ...", Abstrak/Daftar Pustaka/dsb.) ditandai eksplisit dengan
+// sentinel sebelum dikirim ke model, dengan instruksi tegas untuk
+// mereproduksinya PERSIS VERBATIM sebagai heading Markdown — bukan ikut
+// dipadatkan. Ini menjaga sistematika, korespondensi, dan kohesi naskah.
+// ════════════════════════════════════════════════════════════════════
+var CONDENSE_HEADING_PATTERNS = [
+  { level: 1, re: /^BAB\s+[IVXLCDM]+\b/i },
+  { level: 1, re: /^(CHAPTER)\s+\d+\b/i },
+  { level: 1, re: /^(ABSTRAK|ABSTRACT|DAFTAR\s+ISI|DAFTAR\s+PUSTAKA|KATA\s+PENGANTAR|PRAKATA|UCAPAN\s+TERIMA\s+KASIH|LAMPIRAN|REFERENSI|REFERENCES|BIBLIOGRAPHY|APPENDIX)\b\s*:?\s*$/i },
+  { level: 1, re: /^(LAMPIRAN|APPENDIX)\s*:\s*\S/i },
+  { level: 2, re: /^\d+\.\d+(?:\.\d+)?\s+\S/ }
+];
+
+// Deteksi apakah satu baris teks merupakan heading struktural (BAB/subbab).
+function _detectHeadingLine(line) {
+  var t = line.trim();
+  if (!t || t.length < 3 || t.length > 120) return null;
+  if (/[.,;]\s*$/.test(t)) return null; // baris judul akademik jarang diakhiri koma/titik
+  for (var i = 0; i < CONDENSE_HEADING_PATTERNS.length; i++) {
+    if (CONDENSE_HEADING_PATTERNS[i].re.test(t)) return { level: CONDENSE_HEADING_PATTERNS[i].level, text: t };
+  }
+  return null;
+}
+
+// Tandai baris heading dengan sentinel eksplisit [[HEADING_Lx]]...[[/HEADING_Lx]]
+// agar (a) selalu jadi unit "paragraf" tersendiri saat chunking (tidak pernah
+// menyatu/terpotong di tengah bersama kalimat lain), dan (b) model AI
+// menerima sinyal jelas & tidak ambigu mana heading struktural vs prosa biasa.
+function markCondenseHeadings(text) {
+  var lines = text.split('\n');
+  var out = [];
+  var foundAny = false;
+  for (var i = 0; i < lines.length; i++) {
+    var h = _detectHeadingLine(lines[i]);
+    if (h) {
+      foundAny = true;
+      out.push('');
+      out.push('[[HEADING_L' + h.level + ']] ' + h.text + ' [[/HEADING_L' + h.level + ']]');
+      out.push('');
+    } else {
+      out.push(lines[i]);
+    }
+  }
+  return { text: out.join('\n'), hasHeadings: foundAny };
+}
+
+// Pemisahan teks sumber Kondensasi menjadi beberapa bagian (chunk) berbasis
+// PARAGRAF (bukan tengah kalimat), dipakai saat target kondensasi melebihi
+// CONDENSE_CHUNK_TARGET_WORDS. Distribusi mengikuti jumlah kata agar setiap
+// chunk mendekati porsi yang seimbang. FIX v16: heading TIDAK PERNAH
+// dibiarkan sendirian di akhir sebuah chunk terpisah dari isi bab/subbab-nya
+// — flush chunk ditunda satu paragraf jika paragraf terakhir yang baru
+// ditambahkan adalah heading, agar heading selalu diikuti setidaknya
+// sepotong isi bab/subbab yang sama.
+function splitCondenseSourceIntoChunks(text, numChunks) {
+  if (numChunks <= 1) return [text];
+  var paras = text.split(/\n\s*\n/).filter(function (p) { return p.trim().length > 0; });
+  if (paras.length < numChunks) {
+    // Paragraf terlalu sedikit untuk jumlah chunk yang diminta — pecah per kalimat
+    // agar tetap tidak memotong di tengah kalimat.
+    var bySentence = text.match(/[^.!?\n]+[.!?]+(?:\s+|\n+|$)/g);
+    if (bySentence && bySentence.length >= numChunks) paras = bySentence;
+  }
+  var totalWords = countWords(text);
+  var targetPerChunk = totalWords / numChunks;
+  var chunks = [], current = [], currentWords = 0;
+  var HEADING_RE = /^\[\[HEADING_L[12]\]\]/;
+  for (var i = 0; i < paras.length; i++) {
+    var p = paras[i];
+    var pw = countWords(p);
+    var lastWasHeading = current.length > 0 && HEADING_RE.test(current[current.length - 1].trim());
+    if (!lastWasHeading && currentWords > 0 && (currentWords + pw) > targetPerChunk * 1.15 && chunks.length < numChunks - 1) {
+      chunks.push(current.join('\n\n'));
+      current = []; currentWords = 0;
+    }
+    current.push(p);
+    currentWords += pw;
+  }
+  if (current.length) chunks.push(current.join('\n\n'));
+  return chunks.length ? chunks : [text];
+}
+
+// ════════════════════════════════════════════════════════════════════
+// TRANSFORMASI TERSTRUKTUR — Section-Aware, Structure-Deterministic (FIX v17)
+// ────────────────────────────────────────────────────────────────────
+// ROOT CAUSE yang diperbaiki (menggantikan pendekatan bundel-chunk v12–v16
+// untuk dokumen berstruktur BAB/subbab):
+//   Pendekatan lama membungkus 4–8 SECTION (heading + isi) ke dalam SATU
+//   chunk ~3200 kata lalu meminta model memadatkan seluruh bundel ke ~2200
+//   kata. Model TIDAK andal mempertahankan semua section — ia menjalankan
+//   "penilaian editorial ringkas", hanya menyisakan 1–3 section per chunk lalu
+//   MEMBUANG sisanya BESERTA heading-nya. Sentinel heading (v16) hanya mencegah
+//   heading yang DIPERTAHANKAN dari ikut diparafrase — tidak pernah memaksa
+//   model mempertahankan SEMUA section. Akibat empiris: dari 28 heading hanya 8
+//   tersisa; hasil 22% (bukan 70%); bagian akhir (6.2, 6.3, Daftar Pustaka,
+//   Lampiran) hilang total; sebagian teks terpotong di tengah kalimat.
+//
+//   PERBAIKAN v17 — STRUKTUR DIKENDALIKAN KLIEN, BUKAN MODEL:
+//   1. Dokumen di-parse menjadi daftar BLOK terurut: setiap blok = 1 heading
+//      (jika ada) + isi prosa hingga heading berikutnya. Teks sebelum heading
+//      pertama menjadi blok pembuka tanpa heading.
+//   2. Untuk setiap blok, KLIEN menuliskan heading VERBATIM (→ Markdown # / ##).
+//      Model HANYA memproses ISI blok — tidak pernah menyentuh heading, tidak
+//      pernah bisa membuang/menggabungkan section. Penomoran BAB/subbab dijamin
+//      utuh, berurutan, dan bersambung persis seperti naskah asli.
+//   3. Isi blok panjang di-subchunk PER PARAGRAF (tak pernah melintasi section
+//      lain); tiap subchunk dituntaskan dgn continuation (v13) → tak terpotong.
+//   4. Blok referensi/lampiran (Daftar Pustaka, Referensi, Lampiran, dst.)
+//      DILEWATKAN VERBATIM — tidak dipadatkan/diparafrase (integritas sitasi).
+//   5. Perakitan mengikuti urutan asli → SETIAP heading & SETIAP section DIJAMIN
+//      hadir & berurutan. Kegagalan transform 1 blok → fallback ke isi ASLI blok
+//      tsb (dokumen tetap lengkap; tidak pernah kehilangan konten/makna).
+//   Dipakai oleh SEMUA jalur Paraphraser (condense + paraphrase/scholarly/
+//   humanize/elaborate/formalize/simplify) untuk input ber-heading / panjang.
+// ════════════════════════════════════════════════════════════════════
+
+// Heading yang isinya TIDAK BOLEH ditransformasi (dilewatkan verbatim) —
+// bibliografi & lampiran wajib utuh demi integritas referensi akademik.
+var _STRUCT_NOTRANSFORM_RE = /^(DAFTAR\s+PUSTAKA|REFERENSI|REFERENCES|BIBLIOGRAPHY|DAFTAR\s+ISI|LAMPIRAN|APPENDIX)\b/i;
+function _isNoTransformHeading(h) { return _STRUCT_NOTRANSFORM_RE.test((h || '').trim()); }
+
+// Parse teks sumber → daftar blok {level, heading, body} terurut.
+// level 0 = blok pembuka tanpa heading. Memakai _detectHeadingLine yang sama
+// dengan pipeline kondensasi agar deteksi heading konsisten di seluruh sistem.
+function parseStructuredBlocks(rawText) {
+  var lines = String(rawText || '').split('\n');
+  var blocks = [];
+  var cur = { level: 0, heading: '', bodyLines: [] };
+  var flush = function () {
+    if (cur.heading || cur.bodyLines.join('').trim()) {
+      blocks.push({ level: cur.level, heading: cur.heading, body: cur.bodyLines.join('\n').replace(/^\s+|\s+$/g, '') });
+    }
+  };
+  for (var i = 0; i < lines.length; i++) {
+    var h = _detectHeadingLine(lines[i]);
+    if (h) { flush(); cur = { level: h.level, heading: h.text, bodyLines: [] }; }
+    else { cur.bodyLines.push(lines[i]); }
+  }
+  flush();
+  return blocks;
+}
+
+function _headingToMarkdown(level, text) {
+  if (level >= 2) return '## ' + text;
+  if (level === 1) return '# ' + text;
+  return '';
+}
+
+// Bagi isi blok (prosa) menjadi sub-chunk per PARAGRAF (tak pernah tengah
+// kalimat) agar tiap panggilan AI menghasilkan output ≤ kapasitas aman.
+function _splitBodyIntoParaChunks(body, srcChunkWords) {
+  var paras = body.split(/\n\s*\n/).filter(function (p) { return p.trim().length > 0; });
+  if (paras.length === 0) return [];
+  var chunks = [], cur = [], curW = 0;
+  for (var i = 0; i < paras.length; i++) {
+    var pw = countWords(paras[i]);
+    if (curW > 0 && (curW + pw) > srcChunkWords * 1.15) { chunks.push(cur.join('\n\n')); cur = []; curW = 0; }
+    cur.push(paras[i]); curW += pw;
+  }
+  if (cur.length) chunks.push(cur.join('\n\n'));
+  return chunks;
+}
+
+// Transform SATU potongan ISI (prosa murni — TANPA heading) hingga TUNTAS.
+// enforceLength=true (mode condense) → kejar target kata + regenerasi bila kurang;
+// enforceLength=false (mode lain) → output lebih pendek tetap diterima, hanya
+// perbaiki jika benar-benar terpotong di tengah kalimat/kata.
+async function _transformBodyComplete(bodyChunk, extraContext, systemPrompt, model, temperature, lang, targetWords, enforceLength) {
+  var srcWords = countWords(bodyChunk);
+  var estWords = Math.max(targetWords || srcWords, Math.round(srcWords * 0.6));
+  var maxTok = clampMaxTokens(model, estimateTokensFromWords(estWords, lang));
+  var userPrompt = 'TEKS YANG AKAN DIPROSES:\n\n' + bodyChunk + (extraContext || '');
+
+  var result = await _condenseCallWithRetry({
+    action: 'ai_write', model: model, system: systemPrompt,
+    messages: [{ role: 'user', content: userPrompt }],
+    temperature: temperature, max_tokens: maxTok
+  }, 'Transform isi');
+  if (!result || !result.success) throw new Error(result ? (result.error || 'API error') : 'Tidak ada respons dari server');
+  var content = (result.content || '').trim();
+  if (!content) throw new Error('Server AI tidak menghasilkan teks.');
+
+  var rounds = 0, MAX_ROUNDS = 3;
+  while (rounds < MAX_ROUNDS) {
+    var trunc;
+    try { trunc = detectTruncation(content, enforceLength ? targetWords : 0); }
+    catch (_e) { trunc = { truncated: false }; }
+    // Mode non-condense: output lebih pendek BUKAN kegagalan → abaikan word-count-low.
+    if (trunc.truncated && !enforceLength && /word-count-low/.test(trunc.reason || '')) break;
+    if (!trunc.truncated) break;
+    rounds++;
+
+    if (/word-count-low/.test(trunc.reason || '') && enforceLength) {
+      var achieved = countWords(content);
+      var retryPrompt = userPrompt +
+        '\n\n[PERINGATAN — WAJIB DIPATUHI] Percobaan sebelumnya hanya ~' + achieved + ' kata, jauh di bawah ' +
+        'target ' + targetWords + ' kata. Ini KONDENSASI PROPORSIONAL, bukan ringkasan singkat: proses SETIAP ' +
+        'paragraf teks di atas dari awal hingga akhir secara proporsional, jangan melompati bagian manapun. ' +
+        'Tulis ULANG lebih lengkap hingga mendekati ' + targetWords + ' kata.';
+      try {
+        var rr = await _condenseCallWithRetry({
+          action: 'ai_write', model: model, system: systemPrompt,
+          messages: [{ role: 'user', content: retryPrompt }], temperature: temperature, max_tokens: maxTok
+        }, 'Regenerasi isi (kata kurang)');
+        if (rr && rr.success && rr.content) {
+          var rc = String(rr.content).trim();
+          if (countWords(rc) > achieved) content = rc;
+        }
+      } catch (_re) { break; }
+      continue;
+    }
+
+    // Cutoff di tengah kalimat/kata → continuation (v13: batas kata bersih).
+    content = trimTrailingPartialWord(content);
+    try {
+      var tail = content.slice(-1200);
+      var contPrompt =
+        'Lanjutkan PERSIS teks akademis berikut yang TERPOTONG — JANGAN ulangi konten, JANGAN tambah heading/label. ' +
+        'Teks berakhir di batas kata utuh; mulai lanjutanmu sebagai KATA BARU dipisah spasi.\n\n' +
+        '------ EKOR TEKS (untuk konteks) ------\n' + tail +
+        '\n------ LANJUTKAN TEPAT DARI SINI ------\n\nOutput HANYA lanjutannya, akhiri dengan kalimat lengkap (titik/!/?).';
+      var contMaxTok = clampMaxTokens(model, estimateTokensFromWords(Math.max(300, Math.round((targetWords || srcWords) * 0.4)), lang));
+      var cr = await _condenseCallWithRetry({
+        action: 'ai_write', model: model, system: systemPrompt,
+        messages: [{ role: 'user', content: contPrompt }], temperature: temperature, max_tokens: contMaxTok
+      }, 'Continuation isi');
+      if (!cr || !cr.success || !cr.content) break;
+      var ct = stripOverlap(tail, String(cr.content).trim());
+      if (!ct) break;
+      content = content + ' ' + ct;
+    } catch (_ce) { break; }
+  }
+
+  var fc;
+  try { fc = detectTruncation(content, enforceLength ? targetWords : 0); }
+  catch (_e) { fc = { truncated: false }; }
+  if (fc.truncated && !(!enforceLength && /word-count-low/.test(fc.reason || ''))) {
+    content = trimToLastCompleteSentence(content);
+  }
+  return content;
+}
+
+// Mesin utama: transform dokumen terstruktur section-per-section dengan
+// heading dipertahankan VERBATIM oleh klien. Menjamin: semua heading & section
+// hadir, berurutan, tak terpotong. Kegagalan 1 blok → isi asli dipertahankan.
+async function runStructuredParaTransform(text, opts, hooks) {
+  hooks = hooks || {};
+  var mode = opts.mode, model = opts.model, temperature = opts.temperature;
+  var lang = opts.lang, langName = opts.langName;
+  var effRatio = opts.effRatio || 1.0;         // rasio output/input (untuk ukuran sub-chunk)
+  var enforceLength = !!opts.enforceLength;     // target kata ketat (khusus condense)
+  var refNote = opts.refNote || '';
+  var buildBodySystem = opts.buildBodySystem;   // function(subTarget, langName) → system prompt
+  var staticBodySystem = opts.staticBodySystem; // system prompt tetap (mode non-condense)
+
+  var blocks = parseStructuredBlocks(text);
+  if (!blocks.length) blocks = [{ level: 0, heading: '', body: String(text || '').trim() }];
+  var srcChunkWords = Math.max(400, Math.floor(CONDENSE_CHUNK_TARGET_WORDS / Math.max(0.3, effRatio)));
+
+  var parts = [], failedBlocks = [], refUsed = false;
+  var totalBodyBlocks = blocks.filter(function (b) {
+    return b.body && b.body.trim() && !_isNoTransformHeading(b.heading) && countWords(b.body) >= 18;
+  }).length;
+  var doneBodyBlocks = 0;
+
+  for (var bi = 0; bi < blocks.length; bi++) {
+    var blk = blocks[bi];
+    var headingMd = _headingToMarkdown(blk.level, blk.heading);
+    var body = (blk.body || '').trim();
+
+    // Blok tanpa isi → hanya heading.
+    if (!body) { if (headingMd) parts.push(headingMd); continue; }
+    // Referensi/Lampiran → LEWATKAN VERBATIM (integritas sitasi).
+    if (_isNoTransformHeading(blk.heading)) {
+      parts.push((headingMd ? headingMd + '\n\n' : '') + body);
+      continue;
+    }
+    // Isi sangat pendek → lewatkan verbatim (hindari model memadatkan/memanjangkan trivial).
+    if (countWords(body) < 18) {
+      parts.push((headingMd ? headingMd + '\n\n' : '') + body);
+      continue;
+    }
+
+    doneBodyBlocks++;
+    if (hooks.onBlock) hooks.onBlock(doneBodyBlocks, totalBodyBlocks, blk.heading || '(pembuka)');
+
+    var srcChunks = _splitBodyIntoParaChunks(body, srcChunkWords);
+    if (!srcChunks.length) srcChunks = [body];
+
+    var outChunks = [], blockFailed = false;
+    for (var si = 0; si < srcChunks.length; si++) {
+      var sc = srcChunks[si];
+      var scWords = countWords(sc);
+      var subTarget = enforceLength ? Math.max(12, Math.round(scWords * effRatio)) : Math.round(scWords * effRatio);
+      var sys = buildBodySystem ? buildBodySystem(subTarget, langName) : (staticBodySystem || '');
+      var extra = (!refUsed && refNote) ? refNote : '';
+      try {
+        var outText = await _transformBodyComplete(sc, extra, sys, model, temperature, lang, subTarget, enforceLength);
+        if (extra) refUsed = true;
+        outChunks.push(outText);
+      } catch (_be) {
+        console.warn('[StructuredTransform] blok ' + (bi + 1) + '/' + blocks.length + ' subchunk ' + (si + 1) +
+          ' gagal: ' + (_be.message || _be) + ' — mempertahankan teks ASLI subchunk.');
+        outChunks.push(sc); // fallback: isi asli — TIDAK PERNAH kehilangan konten
+        blockFailed = true;
+      }
+      // Jeda antar-panggilan (hindari rate-limit) — kecuali panggilan terakhir.
+      if (!(bi === blocks.length - 1 && si === srcChunks.length - 1)) {
+        await new Promise(function (r) { setTimeout(r, CONDENSE_INTER_CHUNK_DELAY_MS); });
+      }
+    }
+    if (blockFailed) failedBlocks.push(blk.heading || ('blok ' + (bi + 1)));
+    parts.push((headingMd ? headingMd + '\n\n' : '') + outChunks.join('\n\n'));
+  }
+
+  return { content: parts.join('\n\n'), failedBlocks: failedBlocks, blockCount: blocks.length };
+}
+
+// Jaring pengaman absolut: jika setelah semua upaya continuation teks masih
+// berakhir di tengah kalimat/klausa/kata, teks WAJIB dirapikan — sistem
+// TIDAK PERNAH menampilkan potongan mentah seperti "...Rasmussen (202" ke
+// pengguna. FIX v15 — ROOT CAUSE laporan "naskah berakhir di tengah kutipan":
+// versi lama menyerah dan mengembalikan teks APA ADANYA (masih rusak) jika
+// pemangkasan ke kalimat lengkap terakhir akan membuang >40% teks — itulah
+// sebabnya potongan seperti "(202" bisa lolos sampai ke dokumen akhir.
+// Sekarang dipakai CASCADE 3 tingkat, masing-masing tingkat SELALU
+// menghasilkan akhir yang bersih — panjang teks yang dikorbankan menjadi
+// prioritas kedua setelah kebersihan/keutuhan akhir kalimat:
+//   1) Potong ke akhir KALIMAT lengkap terakhir (.!?) — ideal.
+//   2) Jika terlalu banyak terbuang, potong ke akhir KLAUSA (,;:) terakhir.
+//   3) Jika tetap tidak ada titik potong yang wajar, buang fragmen kata
+//      yang tidak utuh + tanda kurung/kutip yang menggantung, lalu tutup
+//      dengan titik — memastikan HASIL AKHIR SELALU rapi secara akademik.
+function trimToLastCompleteSentence(text) {
+  if (!text) return text;
+  var t = text.trim();
+
+  // Tingkat 1: akhir kalimat lengkap
+  var m = t.match(/[.!?][”"’')\]]*(?=\s|$)/g);
+  if (m && m.length) {
+    var lastPunct = t.lastIndexOf(m[m.length - 1]);
+    var cut = lastPunct + m[m.length - 1].length;
+    var trimmed = t.slice(0, cut).trim();
+    if (trimmed.length >= t.length * 0.5) return trimmed;
+  }
+
+  // Tingkat 2: akhir klausa (koma/titik-koma/titik-dua) terakhir
+  var mc = t.match(/[,;:](?=\s|$)/g);
+  if (mc && mc.length) {
+    var lastC = t.lastIndexOf(mc[mc.length - 1]);
+    var cutC = lastC; // buang tanda koma/titik-dua itu sendiri, tutup dgn titik
+    var trimmedC = t.slice(0, cutC).trim();
+    if (trimmedC.length >= t.length * 0.4) {
+      return /[.!?]["'’")\]]*$/.test(trimmedC) ? trimmedC : trimmedC + '.';
+    }
+  }
+
+  // Tingkat 3: jaring pengaman mutlak — buang fragmen kata tak utuh & tanda
+  // kurung/kutip yang menggantung, lalu tutup dengan titik. SELALU dieksekusi
+  // (tidak ada kondisi "menyerah") sehingga akhir teks TIDAK PERNAH mentah.
+  var t3 = trimTrailingPartialWord(t);
+  t3 = t3.replace(/[\(\[\{"'“‘«]+\s*$/, '').replace(/[,;:—-]\s*$/, '').trim();
+  if (!t3) return t; // teks terlalu pendek untuk dipangkas lebih jauh — pertahankan apa adanya
+  return /[.!?]["'’")\]]*$/.test(t3) ? t3 : t3 + '.';
+}
+
+// ════════════════════════════════════════════════════════════════════
 // FIX v10.2 — TRUNCATION DETECTION
 // Mendeteksi apakah teks output terpotong di tengah kalimat
 // (akibat finish_reason='length' di OpenRouter / max_tokens hit).
@@ -12466,7 +13187,11 @@ function setCondensePreset(btn, pct) {
 
   if (pct === 'custom') {
     if (customWrap) customWrap.style.display = '';
-    if (infoEl) infoEl.textContent = 'Masukkan jumlah kata target output yang Anda inginkan';
+    var customEl = document.getElementById('condenseCustomWords');
+    // FIX: field kustom sebelumnya tidak punya listener sama sekali —
+    // info bar tidak pernah update saat user mengetik. Perbaiki di sini
+    // agar konsisten setiap kali preset "Tentukan sendiri" dipilih.
+    updateCondenseCustomInfo(customEl || { value: '' });
     return;
   }
   if (customWrap) customWrap.style.display = 'none';
@@ -12474,9 +13199,42 @@ function setCondensePreset(btn, pct) {
   var desc = pct === 30 ? 'sangat padat — hanya inti argumentasi'
            : pct === 50 ? 'setengah panjang — poin utama + konteks'
            : 'sedikit dipadatkan — detail penting dipertahankan';
-  if (infoEl) infoEl.textContent = 'Target: ' + pct + '% dari teks asli'
-    + (targetW ? ' ≈ ' + targetW.toLocaleString('id-ID') + ' kata' : '')
-    + ' — ' + desc;
+  if (infoEl) {
+    infoEl.style.color = '#818cf8';
+    infoEl.textContent = 'Target: ' + pct + '% dari teks asli'
+      + (targetW ? ' ≈ ' + targetW.toLocaleString('id-ID') + ' kata' : '')
+      + ' — ' + desc;
+  }
+}
+
+// ── Live info untuk target kustom Kondensasi ──────────────────────────
+// Menampilkan konfirmasi jumlah kata target secara real-time saat user
+// mengetik, termasuk peringatan jika target ≥ panjang teks asli (bukan
+// lagi kondensasi) sehingga user tahu nilainya akan disesuaikan otomatis
+// saat generate (lihat computeCondenseTarget()).
+function updateCondenseCustomInfo(el) {
+  var infoEl     = document.getElementById('condenseTargetInfo');
+  var inputEl    = document.getElementById('paraInput');
+  var inputWords = inputEl ? countWords(inputEl.value) : 0;
+  var val        = el ? parseInt(el.value, 10) : NaN;
+  if (!infoEl) return;
+
+  if (isNaN(val) || val < 10) {
+    infoEl.style.color = '#818cf8';
+    infoEl.textContent = 'Masukkan jumlah kata target output yang Anda inginkan (minimal 10 kata)';
+    return;
+  }
+  if (inputWords > 0 && val >= inputWords) {
+    infoEl.style.color = '#f59e0b';
+    infoEl.textContent = '⚠️ Target (' + val.toLocaleString('id-ID') + ' kata) ≥ panjang teks asli ('
+      + inputWords.toLocaleString('id-ID') + ' kata) — ini bukan kondensasi. Nilai akan disesuaikan otomatis saat generate.';
+    return;
+  }
+  var pct = inputWords > 0 ? Math.round(val / inputWords * 100) : null;
+  infoEl.style.color = '#818cf8';
+  infoEl.textContent = 'Target kustom: ' + val.toLocaleString('id-ID') + ' kata'
+    + (pct ? ' (≈' + pct + '% dari teks asli)' : '')
+    + ' — akan disesuaikan otomatis jika melebihi kapasitas model AI yang dipilih';
 }
 function setParaIntensity(level) {
   document.getElementById('paraIntensity').value = level;
@@ -12492,8 +13250,19 @@ function updateParaCounter(ta) {
   var modeVal = mode ? mode.value : 'paraphrase';
   if (modeVal === 'condense' && wc > 0) {
     // Show current word count + estimated target for active preset
-    var pctEl = document.querySelector('.condense-preset.active');
-    var pct   = pctEl ? parseInt(pctEl.dataset.pct) : null;
+    var pctEl  = document.querySelector('.condense-preset.active');
+    var pctRaw = pctEl ? pctEl.dataset.pct : null;
+    if (pctRaw === 'custom') {
+      // FIX: sebelumnya mode custom tidak ditangani di sini sama sekali —
+      // counter & info bar tidak ikut update saat teks asli diedit.
+      var customEl = document.getElementById('condenseCustomWords');
+      var cv = customEl ? parseInt(customEl.value, 10) : NaN;
+      counter.textContent = wc.toLocaleString() + ' kata'
+        + (!isNaN(cv) && cv > 0 ? ' → target: ' + cv.toLocaleString() + ' kata' : '');
+      updateCondenseCustomInfo(customEl || { value: '' });
+      return;
+    }
+    var pct = pctRaw ? parseInt(pctRaw, 10) : null;
     if (pct && !isNaN(pct)) {
       var target = Math.round(wc * pct / 100);
       counter.textContent = wc.toLocaleString() + ' kata → target: ~' + target.toLocaleString() + ' kata';
@@ -12856,8 +13625,8 @@ function paraExportPDF() {
   '<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8">'+
   '<title>Laporan Integritas Akademis — SCHOLARIS</title>'+
   '<style>'+
-  'body{font-family:"Times New Roman",serif;font-size:12pt;line-height:1.8;color:#000;margin:0;padding:0;}'+
-  '@page{size:A4;margin:2.5cm 3cm 2.5cm 3cm;}'+
+  'body{font-family:"Times New Roman",serif;font-size:12pt;line-height:1.5;color:#000;margin:0;padding:0;}'+
+  '@page{size:A4;margin:2.2cm 2.2cm 2.2cm 2.2cm;}'+
   '@media print{body{margin:0;}button{display:none!important;}.no-print{display:none!important;}}'+
   'h1{font-size:16pt;text-align:center;border-bottom:2pt solid #1a1410;padding-bottom:8pt;margin-bottom:6pt;}'+
   'h2{font-size:13pt;border-left:4pt solid #c8a96a;padding-left:8pt;margin-top:18pt;}'+
@@ -12871,7 +13640,11 @@ function paraExportPDF() {
   '.stamp{border:2pt solid #2e7d32;border-radius:4pt;padding:8pt 14pt;text-align:center;'+
     'color:#2e7d32;font-weight:700;font-size:11pt;display:inline-block;margin:8pt auto;}'+
   '.text-box{background:#f9f7f4;border:1pt solid #ddd;border-left:3pt solid #c8a96a;'+
-    'padding:10pt;margin:8pt 0;font-size:10.5pt;line-height:1.7;}'+
+    'padding:10pt;margin:8pt 0;font-size:10.5pt;line-height:1.5;}'+
+  '.text-box h1{font-size:13pt;font-weight:bold;text-align:center;margin:10pt 0 6pt 0;}'+
+  '.text-box h2{font-size:11.5pt;font-weight:bold;margin:9pt 0 4pt 0;}'+
+  '.text-box h3{font-size:10.5pt;font-weight:bold;font-style:italic;margin:8pt 0 3pt 0;}'+
+  '.text-box p{margin:0 0 6pt 0;text-align:justify;}'+
   '.integrity-box{border:2pt solid #2e7d32;padding:12pt;margin-top:14pt;background:#f0fff4;}'+
   '.footer{text-align:center;font-size:9pt;color:#888;margin-top:20pt;padding-top:8pt;border-top:1pt solid #ddd;}'+
   '.print-btn{position:fixed;top:20px;right:20px;padding:10px 18px;background:#1a1410;color:#f5deb3;'+
@@ -12902,7 +13675,9 @@ function paraExportPDF() {
   '<div class="text-box">'+orig.replace(/\n/g,'<br>')+'</div>'+
 
   '<h2>IV. HASIL TRANSFORMASI</h2>'+
-  '<div class="text-box">'+res.replace(/\n/g,'<br>')+'</div>'+
+  '<div class="text-box para-result-rendered">'+
+    (typeof marked !== 'undefined' && marked.parse ? marked.parse(res) : res.replace(/\n/g,'<br>')) +
+  '</div>'+
 
   '<h2>V. PERNYATAAN INTEGRITAS AKADEMIS</h2>'+
   '<div class="integrity-box">'+
@@ -13098,17 +13873,18 @@ async function doParaphrase() {
       : 'Apply MODERATE transformation: meaningfully change structure and vocabulary while maintaining natural academic flow.';
 
     // ── Kondensasi: compute target words from UI settings ──────
-    var _condenseTargetWords = (function() {
-      var inputWords = countWords(text);
-      var pctEl = document.querySelector('.condense-preset.active');
-      var pct = pctEl ? parseInt(pctEl.dataset.pct) || 50 : 50;
-      if (isNaN(pct)) {
-        // custom mode
-        var customEl = document.getElementById('condenseCustomWords');
-        return customEl ? (parseInt(customEl.value) || Math.round(inputWords * 0.5)) : Math.round(inputWords * 0.5);
-      }
-      return Math.round(inputWords * pct / 100);
-    })();
+    // FIX v11: menggantikan IIFE lama yang punya bug kritis (custom target
+    // selalu diabaikan karena `parseInt('custom')||50` mengubah NaN→50
+    // SEBELUM sempat dicek isNaN). Sekarang memakai computeCondenseTarget()
+    // yang: (1) menghormati custom target dengan benar, (2) menjaga target
+    // tidak ≥ panjang asli, (3) menjaga target tidak melebihi kapasitas
+    // output model yang dipilih — sehingga hasil presisi & tidak terpotong.
+    var _condenseInfo = (mode === 'condense') ? computeCondenseTarget(text, _paraEffModel, lang) : null;
+    var _condenseTargetWords = _condenseInfo ? _condenseInfo.targetWords : null;
+    if (_condenseInfo && _condenseInfo.clamped) {
+      toast('⚠️ Target kondensasi disesuaikan menjadi ~' + _condenseInfo.targetWords.toLocaleString('id-ID')
+        + ' kata (' + _condenseInfo.clampReason + ')', 5500);
+    }
 
     var systemPrompts = {
       paraphrase: 'You are a senior academic editor with 20+ years in scholarly publishing. Paraphrase the academic text maintaining rigorous scholarly standards. '+intensityNote+' Maintain all factual claims, citations, and logical arguments. Use varied sentence structures, precise academic vocabulary. Output only the paraphrased text in '+langName+', no explanations.',
@@ -13120,35 +13896,113 @@ async function doParaphrase() {
       condense:   'You are an elite academic editor specializing in precision condensation of scholarly texts. Your task: distill the following academic text into EXACTLY approximately '+_condenseTargetWords+' words in '+langName+'. CONDENSATION RULES: (1) Identify the 3-5 core arguments/findings and preserve them completely; (2) Eliminate all redundancy, repetition, and verbose transitions; (3) Compress examples to their essential point — one precise example per concept, not three; (4) Merge related sentences into single dense but clear statements; (5) Cut all filler phrases ("it is important to note that", "as mentioned above", etc.); (6) Preserve ALL citations and key technical terms; (7) Maintain logical flow and paragraph coherence; (8) The output MUST read as a standalone, complete academic text — NOT as a summary or bullet list. Output ONLY the condensed text in '+langName+', no explanations, no preamble.'
     };
 
-    // ── Kirim ke GAS ──────────────────────────────────────────
-    var _paraPayload = {
-      action:'ai_write', model:_paraEffModel,
-      system: systemPrompts[mode] || systemPrompts.paraphrase,
-      messages:[{role:'user', content:'TEKS YANG AKAN DITRANSFORMASI:\n\n'+text+paraRefNote}],
-      temperature: 0.3 + (intensity * 0.1),
-      max_tokens: 8000
-    };
-    var result = await callGAS(_paraPayload, 320000);
+    // ── Kirim ke GAS ──────────────────────────────────────────────────
+    // FIX v17 — SEMUA JALUR PARAPHRASER kini melalui mesin TERSTRUKTUR
+    // (section-aware) untuk input ber-heading / dokumen panjang, sehingga
+    // SETIAP BAB/subbab & isinya DIJAMIN lengkap, berurutan, tak terpotong.
+    // Teks pendek TANPA heading tetap memakai jalur 1x panggilan (perilaku
+    // lama — nol regresi). Lihat runStructuredParaTransform() (FIX v17).
+    var result, _paraRaw;
 
-    // Jika gagal & ada paraRefNote → coba ulang tanpa referensi (payload lebih ringan)
-    if ((!result || !result.success) && paraRefNote) {
-      console.warn('[doParaphrase] attempt 1 failed, retrying without refs...');
-      setProgTitle('↩️ Mencoba ulang...', 'Kirim ulang tanpa pool referensi');
-      result = await callGAS(Object.assign({}, _paraPayload, {
-        messages:[{role:'user', content:'TEKS YANG AKAN DITRANSFORMASI:\n\n'+text}]
-      }), 320000);
-    }
+    // Deteksi struktur & panjang untuk memilih mesin yang tepat.
+    var _hasHeadings   = markCondenseHeadings(text).hasHeadings;
+    var _inputWC       = countWords(text);
+    var _useStructured = (mode === 'condense') || _hasHeadings || (_inputWC > STRUCTURED_LONGDOC_MIN_WORDS);
 
-    if (!result || !result.success) {
-      var _rawErr = result ? (result.error || 'API error') : 'Tidak ada respons dari server';
-      throw new Error(_rawErr);
+    if (_useStructured) {
+      // Rasio ukuran output/input (untuk mengukur sub-chunk agar tak terpotong).
+      var _effRatio = (mode === 'condense')
+        ? ((_condenseTargetWords && _inputWC) ? Math.min(0.98, Math.max(0.10, _condenseTargetWords / _inputWC)) : 0.5)
+        : (mode === 'elaborate' ? 1.55 : (mode === 'simplify' ? 0.9 : 1.0));
+      var _enforceLen = (mode === 'condense');
+
+      var _structOpts = {
+        mode: mode, model: _paraEffModel, temperature: 0.3 + (intensity * 0.1),
+        lang: lang, langName: langName, effRatio: _effRatio, enforceLength: _enforceLen,
+        refNote: paraRefNote || ''
+      };
+
+      if (mode === 'condense') {
+        // System prompt ISI (prosa murni, TANPA heading — heading ditangani klien).
+        // Bahasa DIPERTAHANKAN per-segmen (mencegah abstrak Inggris ikut diterjemahkan).
+        _structOpts.buildBodySystem = function (subTarget, _langName) {
+          var minW = Math.max(10, Math.floor(subTarget * 0.85));
+          var maxW = Math.round(subTarget * 1.15);
+          return 'You are an elite academic editor specializing in precision condensation of scholarly prose. ' +
+            'Condense the following academic PROSE segment to approximately ' + subTarget + ' words ' +
+            '(HARD RANGE ' + minW + '–' + maxW + ' words). Write in the SAME LANGUAGE as the source segment — do NOT translate. ' +
+            'PROPORTIONAL CONDENSATION, NOT A BRIEF SUMMARY: process the ENTIRE segment from its first sentence to its ' +
+            'very last sentence, condensing every paragraph proportionally; do NOT stop early or drop later parts — a ' +
+            'short "complete-sounding" passage far below the word count is a FAILURE. RULES: (1) preserve all core ' +
+            'arguments, findings, data, citations, and key technical terms; (2) eliminate redundancy, repetition, and ' +
+            'verbose transitions; (3) compress examples to their essential point; (4) merge related sentences into dense ' +
+            'but clear statements; (5) cut filler phrases; (6) maintain logical flow. The segment contains NO headings — ' +
+            'it is body prose only; output flowing academic paragraphs, NOT a summary or bullet list, NOT any heading or ' +
+            'label. Output ONLY the condensed prose, no preamble, no explanations.';
+        };
+      } else {
+        // Mode transformasi lain: pakai system prompt mode apa adanya (isi prosa),
+        // heading tetap dipertahankan verbatim oleh klien.
+        _structOpts.staticBodySystem = systemPrompts[mode] || systemPrompts.paraphrase;
+      }
+
+      var _structRes = await runStructuredParaTransform(text, _structOpts, {
+        onBlock: function (done, total, label) {
+          setProgTitle('🤖 ' + (modeNames[mode] || mode) + ' — bagian ' + done + '/' + total + '...',
+            (label ? String(label).slice(0, 80) : '') + (total > 1 ? ' · struktur BAB/subbab dijaga utuh' : ''));
+        }
+      });
+
+      _paraRaw = _structRes.content;
+      result = { success: true, content: _paraRaw };
+
+      if (_structRes.failedBlocks && _structRes.failedBlocks.length) {
+        toast('⚠️ ' + _structRes.failedBlocks.length + ' bagian tidak dapat ditransformasi karena gangguan koneksi/server — ' +
+          'teks ASLI bagian tsb DIPERTAHANKAN agar dokumen tetap lengkap & berurutan. Silakan generate ulang bila perlu.', 8000);
+      }
+
+      // Transparansi target untuk mode condense (semua bab/subbab tetap lengkap).
+      if (mode === 'condense') {
+        var _achievedWords = countWords(_paraRaw);
+        var _achievedPct   = _condenseTargetWords > 0 ? Math.round(_achievedWords / _condenseTargetWords * 100) : 100;
+        if (_achievedPct < 80) {
+          toast('ℹ️ Kondensasi mencapai ' + _achievedWords.toLocaleString('id-ID') + ' kata (' + _achievedPct +
+            '% dari target ' + _condenseTargetWords.toLocaleString('id-ID') + ' kata). Seluruh BAB/subbab tetap lengkap & ' +
+            'berurutan; naikkan target atau coba model lain bila ingin lebih panjang.', 6500);
+        }
+      }
+    } else {
+      // ── Jalur 1x panggilan (teks pendek tanpa heading) — perilaku lama, nol regresi ──
+      var _paraPayload = {
+        action:'ai_write', model:_paraEffModel,
+        system: systemPrompts[mode] || systemPrompts.paraphrase,
+        messages:[{role:'user', content:'TEKS YANG AKAN DITRANSFORMASI:\n\n'+text+paraRefNote}],
+        temperature: 0.3 + (intensity * 0.1),
+        max_tokens: clampMaxTokens(_paraEffModel, 8000)
+      };
+      result = await callGAS(_paraPayload, 320000);
+
+      // Jika gagal & ada paraRefNote → coba ulang tanpa referensi (payload lebih ringan)
+      if ((!result || !result.success) && paraRefNote) {
+        console.warn('[doParaphrase] attempt 1 failed, retrying without refs...');
+        setProgTitle('↩️ Mencoba ulang...', 'Kirim ulang tanpa pool referensi');
+        result = await callGAS(Object.assign({}, _paraPayload, {
+          messages:[{role:'user', content:'TEKS YANG AKAN DITRANSFORMASI:\n\n'+text}]
+        }), 320000);
+      }
+
+      if (!result || !result.success) {
+        var _rawErr = result ? (result.error || 'API error') : 'Tidak ada respons dari server';
+        throw new Error(_rawErr);
+      }
+      _paraRaw = (result.content || '').trim();
     }
     setProgStep(2,'done');
 
     // ── Grok 4.20 Empirical Grounding — Paraphraser ──
-    // Aktif untuk mode data-intensif; dilewati untuk humanize & simplify
-    var _paraRaw = (result.content || '').trim();
+    // Aktif untuk mode data-intensif; dilewati untuk humanize, simplify & condense
     if (!_paraRaw) throw new Error('Server AI tidak menghasilkan teks. Coba model atau mode lain.');
+
     var _paraGroundModes = ['scholarly','elaborate','formalize','paraphrase'];
     var _paraTitle = text.slice(0,150).replace(/<[^>]+>/g,' ').trim();
     var _paraCite  = (document.getElementById('citeStyle') && document.getElementById('citeStyle').value) || 'apa7';
@@ -14110,10 +14964,12 @@ function _buildWordHTML(title, author, today, bodyHtml) {
     '<meta name="Generator" content="Microsoft Word 15">' +
     '<title>' + safeTitle + '</title>' +
     '<style>' +
-      /* Page setup — A4, margin 3cm kiri (binding), 2.54cm sisanya */
+      /* Page setup — FIX v16: A4, margin 2.2cm SEMUA SISI, 1.5 spasi sesuai
+         standar akademik yang diminta (sebelumnya margin asimetris 2.54/3.0cm
+         untuk penjilidan + spasi ganda 200% — tidak sesuai ketentuan standar). */
       '@page WordSection1{' +
         'size:21.0cm 29.7cm;' +
-        'margin:2.54cm 2.54cm 2.54cm 3.0cm;' +
+        'margin:2.2cm 2.2cm 2.2cm 2.2cm;' +
         'mso-header-margin:1.0cm;' +
         'mso-footer-margin:1.0cm;' +
       '}' +
@@ -14122,7 +14978,7 @@ function _buildWordHTML(title, author, today, bodyHtml) {
       'body{' +
         'font-family:"Times New Roman",Times,serif;' +
         'font-size:12.0pt;' +
-        'line-height:2.0;' +  /* double-space */
+        'line-height:1.5;' +  /* 1.5 spasi sesuai standar akademik */
         'color:#000000;' +
         'margin:0;padding:0;' +
         'mso-fareast-language:ID;' +
@@ -14148,7 +15004,7 @@ function _buildWordHTML(title, author, today, bodyHtml) {
         'text-indent:1.27cm;' +  /* indent paragraf pertama 1.27cm */
         'margin:0 0 0 0;' +
         'mso-line-height-rule:exactly;' +
-        'line-height:200%;' +
+        'line-height:150%;' +  /* 1.5 spasi sesuai standar akademik */
       '}' +
       /* Lists */
       'ul,ol{' +
