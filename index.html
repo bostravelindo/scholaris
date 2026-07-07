@@ -3600,6 +3600,19 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
                   secara utuh, lengkap, mendalam, dan profesional.
                 </div>
               </div>
+              <div class="book-gen-opt" id="genOptC" onclick="selectGenOpt('C')">
+                <div class="opt-radio"></div>
+                <div class="book-gen-opt-title">
+                  <span style="font-size:1.1rem;">📎</span> Opsi C — Input Manual Kustom (dari File Sumber)
+                  <span class="book-gen-opt-badge">Sumber Data</span>
+                </div>
+                <div class="book-gen-opt-desc">
+                  Unggah satu atau beberapa file sumber (naskah, catatan, artikel, data). AI akan
+                  <strong>menganalisis</strong> seluruh materi, menyusun sistematika buku secara otomatis,
+                  lalu mengolahnya secara <strong>integratif, sistematis, koheren, dan kohesif</strong> menjadi
+                  buku berintegritas ilmiah tinggi berbasis sumber Anda.
+                </div>
+              </div>
             </div>
 
             <!-- ── OPSI A: hanya judul, tombol langsung ── -->
@@ -3632,6 +3645,31 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
                   <button class="btn btn-sm btn-secondary" onclick="addBookChapter()">＋ Tambah Bab</button>
                   <button class="btn btn-sm btn-secondary" onclick="generateBookOutline()">🤖 Isi Otomatis dari Judul</button>
                   <button class="btn btn-sm btn-secondary" onclick="openTemplateLibrary('book')">📚 Template Buku</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- ── OPSI C: unggah file sumber ── -->
+            <div id="bookSourceSection" style="display:none;">
+              <div style="background:rgba(168,139,250,.06);border:1px solid rgba(168,139,250,.18);border-radius:8px;padding:14px;">
+                <label style="font-weight:700;display:block;margin-bottom:8px;">📎 File Sumber Data</label>
+                <div style="border:2px dashed var(--accent-border);border-radius:8px;padding:16px;text-align:center;cursor:pointer;background:var(--accent-soft);"
+                     onclick="document.getElementById('bookSourceFiles').click()">
+                  <div style="font-size:1.6rem;">⬆️</div>
+                  <div style="font-size:.82rem;color:var(--text2);font-weight:600;">Klik untuk unggah file sumber</div>
+                  <div style="font-size:.7rem;color:var(--text3);margin-top:3px;">.txt · .md · .csv · .json · .html · .docx · .pdf — bisa beberapa file sekaligus</div>
+                </div>
+                <input type="file" id="bookSourceFiles" multiple accept=".txt,.md,.markdown,.csv,.json,.html,.htm,.docx,.pdf,text/plain"
+                       style="display:none;" onchange="handleBookSourceFiles(this)">
+                <div id="bookSourceList" style="margin-top:10px;"></div>
+                <label style="font-weight:700;display:block;margin:12px 0 6px;font-size:.8rem;">Atau tempel teks sumber tambahan (opsional)</label>
+                <textarea id="bookSourcePaste" rows="4" placeholder="Tempel materi sumber tambahan di sini (catatan, kutipan, data mentah)..."
+                          style="width:100%;" oninput="updateBookSourceMeta()"></textarea>
+                <div id="bookSourceMeta" style="font-size:.72rem;color:var(--text3);margin-top:6px;"></div>
+                <div style="background:rgba(168,139,250,.08);border-radius:7px;padding:10px 12px;font-size:.78rem;color:var(--text2);line-height:1.55;margin-top:10px;">
+                  💡 <strong>Cara kerja Opsi C:</strong> Setelah klik <em>🚀 Analisis & Susun Buku</em>, AI akan
+                  (1) menganalisis seluruh materi sumber, (2) menyusun sistematika buku (Bab → Subbab → Sub-Subbab)
+                  berbasis isi sumber, (3) generate tiap bab secara integratif & koheren dari materi Anda + referensi Hexa-Source.
                 </div>
               </div>
             </div>
@@ -10729,6 +10767,122 @@ function updateBiblioGenerateBadge() {
 }
 
 // ---- SYSTEM PROMPTS ----
+// ════════════════════════════════════════════════════════════════════════════
+// CITATION STYLE ENGINE (FITUR v10.8) — konsistensi 8-gaya, anti gaya-ganda.
+// Sumber kebenaran tunggal untuk keluarga gaya sitasi + direktif prompt yang
+// tegas (satu gaya saja) + SANITIZER deterministik yang menghapus kebocoran
+// gaya lain (mis. (Penulis, Tahun) yang menyusup ke naskah gaya footnote).
+// Diterapkan realtime pada in-text DAN daftar pustaka, konsisten di semua jalur.
+// ════════════════════════════════════════════════════════════════════════════
+var CITE_STYLE_CONFIG = {
+  apa7:       { family: 'author_year', label: 'APA 7th Edition',            intext: '(Penulis, Tahun)',   reflabel: 'Daftar Pustaka' },
+  chicago:    { family: 'footnote',    label: 'Chicago 17th Notes-Bibliography', intext: 'angka superscript [¹][²] + catatan kaki', reflabel: 'Daftar Pustaka' },
+  chicago_ad: { family: 'author_year', label: 'Chicago 17th Author-Date',   intext: '(Penulis Tahun)',    reflabel: 'Daftar Pustaka' },
+  harvard:    { family: 'author_year', label: 'Harvard',                    intext: '(Penulis Tahun)',    reflabel: 'Daftar Pustaka' },
+  ieee:       { family: 'numeric',     label: 'IEEE',                       intext: 'nomor berkurung [1][2][3]', reflabel: 'Daftar Pustaka' },
+  turabian:   { family: 'footnote',    label: 'Turabian 9th Notes-Bibliography', intext: 'angka superscript [¹][²] + catatan kaki', reflabel: 'Daftar Pustaka' },
+  isnad:      { family: 'footnote',    label: 'ISNAD (Kajian Islam)',       intext: 'angka superscript [¹][²] + catatan kaki', reflabel: 'Daftar Pustaka' }
+};
+function citeFamily(style) { return (CITE_STYLE_CONFIG[style] || CITE_STYLE_CONFIG.apa7).family; }
+function citeLabel(style)  { return (CITE_STYLE_CONFIG[style] || CITE_STYLE_CONFIG.apa7).label; }
+
+// Direktif gaya sitasi yang TEGAS & TUNGGAL untuk prompt (mencegah gaya-ganda).
+function buildCitationDirective(style, langName) {
+  var fam = citeFamily(style);
+  var lbl = citeLabel(style);
+  var head = '⚠️ GAYA SITASI WAJIB (SATU-SATUNYA, TIDAK BOLEH DICAMPUR): ' + lbl + '.';
+  if (fam === 'footnote') {
+    return head + '\n' +
+      '• IN-TEXT: gunakan HANYA angka superscript [¹][²][³] setelah pernyataan yang dikutip.\n' +
+      '• DILARANG KERAS menulis sitasi (Penulis, Tahun) / (Penulis Tahun) / [1] di dalam teks. ' +
+      'Itu gaya lain (APA/Harvard/IEEE) dan menyebabkan sitasi GANDA — JANGAN dipakai sama sekali.\n' +
+      '• Sebelum daftar catatan kaki, buat pemisah garis (---).\n' +
+      '• Tulis daftar catatan kaki di bagian "## Catatan Kaki" (setelah garis pemisah), lalu "## Daftar Pustaka".\n' +
+      '• Format catatan kaki ' + lbl + ': ¹ Nama Depan Belakang, "Judul Artikel," Nama Jurnal Vol, no. Issue (Tahun): Hal. https://doi.org/xxx';
+  }
+  if (fam === 'numeric') {
+    return head + '\n' +
+      '• IN-TEXT: gunakan HANYA nomor berkurung [1][2][3] sesuai urutan kemunculan pertama.\n' +
+      '• DILARANG menulis (Penulis, Tahun) atau superscript catatan kaki di teks — itu gaya lain & menyebabkan sitasi ganda.\n' +
+      '• Daftar pustaka bernomor sesuai urutan sitasi (bukan alfabetis) di "## Daftar Pustaka".';
+  }
+  // author_year
+  var form = (style === 'chicago_ad' || style === 'harvard') ? '(Penulis Tahun)' : '(Penulis, Tahun)';
+  return head + '\n' +
+    '• IN-TEXT: gunakan HANYA format ' + form + ' — mis. ' + form.replace('Penulis', 'Rahman').replace('Tahun', '2021') + '.\n' +
+    '• DILARANG menggunakan angka superscript [¹] / catatan kaki / nomor [1] di teks — itu gaya footnote/IEEE & menyebabkan sitasi ganda.\n' +
+    '• JANGAN membuat bagian "## Catatan Kaki". Cukup "## Daftar Pustaka" alfabetis di akhir.';
+}
+
+// ── SANITIZER anti gaya-ganda ───────────────────────────────────────────────
+// Regex sitasi author-year (parenthetical) yang ketat: butuh token nama berkapital
+// + tahun 4-digit, dengan pemisah yang wajar. Menghindari "(2021)", "(lihat Tabel 1)",
+// "(Q.S. al-Baqarah: 30)".
+var _AY_CITE_RE = new RegExp(
+  '\\s*\\(' +
+  '(?:(?:e\\.g\\.|i\\.e\\.|cf\\.|lihat|see|misal(?:nya)?)[,:]?\\s*)?' +          // opsi pengantar
+  '[A-Z\\u00C0-\\u024F][A-Za-z.\\u00C0-\\u024F\'\\u2019\\-]+' +                   // token nama pertama (kapital)
+  '(?:(?:,\\s*|\\s+&\\s+|\\s+(?:dan|and|et\\s+al\\.?|dkk\\.?)\\s+|\\s+)' +
+  '[A-Za-z.\\u00C0-\\u024F\'\\u2019\\-]+)*' +                                     // token nama tambahan
+  '[,\\s]+' +
+  '(?:19|20)\\d{2}[a-z]?' +                                                       // tahun
+  '(?:,\\s*(?:pp?\\.|hlm\\.?|h\\.|vol\\.)?\\s*\\d+(?:\\s*[-\\u2013]\\s*\\d+)?)?' + // halaman opsional
+  '\\)', 'g'
+);
+// Penanda superscript catatan kaki dalam teks (mis. [¹] [²] atau superscript unicode).
+var _SUP_MARK_RE = /\s*\[[\u00B9\u00B2\u00B3\u2070-\u209F]+\]|[\u00B9\u00B2\u00B3\u2070\u2074-\u2079]+/g;
+
+function _hasFootnoteSignals(text) {
+  return /\[[\u00B9\u00B2\u00B3\u2070-\u209F]+\]/.test(text) ||
+         /##\s*Catatan Kaki|##\s*Footnotes/i.test(text) ||
+         /[\u00B9\u00B2\u00B3]\s+[A-Z\u00C0-\u024F]/.test(text);
+}
+
+// Hapus bagian ## Catatan Kaki / ## Footnotes (untuk gaya non-footnote).
+function _stripFootnoteSection(text) {
+  return text.replace(/\n?#{1,4}\s*(Catatan Kaki|Footnotes|Endnotes)[^\n]*\n[\s\S]*?(?=\n#{1,4}\s|\n*$)/gi, '\n');
+}
+
+// Pastikan ## Catatan Kaki didahului garis pemisah (---).
+function _ensureFootnoteSeparator(text) {
+  return text.replace(/(^|\n)(#{1,4}\s*(?:Catatan Kaki|Footnotes)\b)/i, function (m, pre, hd) {
+    // Jangan gandakan bila sudah ada --- tepat sebelumnya.
+    if (/\n-{3,}\s*$/.test(pre) || /-{3,}\s*\n\s*$/.test(pre)) return m;
+    return pre + '\n---\n\n' + hd;
+  });
+}
+
+// Terapkan konsistensi gaya sitasi pada naskah final (anti gaya-ganda).
+function enforceCitationStyle(text, style) {
+  if (!text || typeof text !== 'string') return text;
+  var fam = citeFamily(style);
+  var out = text;
+
+  if (fam === 'footnote') {
+    // Hanya bersihkan bila naskah memang bergaya footnote (ada superscript/Catatan Kaki),
+    // agar tak pernah menghapus sitasi dari naskah yang (keliru) belum berfootnote.
+    if (_hasFootnoteSignals(out)) {
+      // Buang sitasi author-year yang menyusup ke teks (penyebab gaya-ganda).
+      out = out.replace(_AY_CITE_RE, '');
+      // Rapikan spasi ganda / sebelum tanda baca akibat penghapusan.
+      out = out.replace(/\s{2,}/g, ' ').replace(/\s+([.,;:])/g, '$1');
+      out = _ensureFootnoteSeparator(out);
+    }
+  } else if (fam === 'author_year') {
+    // Author-year tak memakai footnote: buang bagian Catatan Kaki & penanda superscript.
+    out = _stripFootnoteSection(out);
+    out = out.replace(/\s*\[[\u00B9\u00B2\u00B3\u2070-\u209F]+\]/g, '');
+  } else if (fam === 'numeric') {
+    // IEEE: buang sitasi author-year & footnote yang menyusup.
+    out = _stripFootnoteSection(out);
+    out = out.replace(_AY_CITE_RE, '');
+    out = out.replace(/\s{2,}/g, ' ').replace(/\s+([.,;:])/g, '$1');
+  }
+  // Rapikan baris kosong berlebih.
+  out = out.replace(/\n{4,}/g, '\n\n\n');
+  return out;
+}
+
 function getSystemPrompt(mode, lang, citeStyle) {
   const langMap = { id: 'Bahasa Indonesia', en: 'English', ar: 'Arabic (العربية)' };
   const langName = langMap[lang] || 'Bahasa Indonesia';
@@ -10846,7 +11000,9 @@ For MODERN academic papers: (Author, Year) — e.g. (Rahman, 2021)
 BIBLIOGRAPHY order: Classical sources first (by hijri/Islamic century), then modern sources alphabetically.
 Transliteration: Use IJMES or Library of Congress system for Arabic titles.`
   };
-  const citeNote = '\n\nCITATION STYLE: ' + (citeInstructions[citeStyle] || citeInstructions.apa7);
+  const citeNote = '\n\n' + buildCitationDirective(citeStyle, langName) +
+    '\n\nRINCIAN FORMAT ' + citeLabel(citeStyle).toUpperCase() + ':\n' +
+    (citeInstructions[citeStyle] || citeInstructions.apa7);
 
   return base + citeNote + '\n\nSPECIFIC MODE INSTRUCTIONS:\n' + (modeInstructions[mode] || modeInstructions.article_full);
 }
@@ -12357,6 +12513,18 @@ async function _dispatchGeneration(mode, model, lang, cite, temp, title, instruc
     displayOutput(content, 'outputArea', 'outputCard');
     updateStats(content, model);
   }
+
+  // FITUR v10.8: terapkan konsistensi GAYA SITASI (anti gaya-ganda) pada hasil final,
+  // untuk in-text & daftar pustaka, konsisten di semua jalur/model.
+  try {
+    if (typeof lastOutput === 'string' && lastOutput.trim()) {
+      var _enforced = enforceCitationStyle(lastOutput, cite);
+      if (_enforced && _enforced !== lastOutput) {
+        lastOutput = _enforced;
+        displayOutput(lastOutput, 'outputArea', 'outputCard');
+      }
+    }
+  } catch (_ce) { console.warn('[enforceCitationStyle]', _ce && _ce.message); }
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -17700,17 +17868,23 @@ function selectGenOpt(opt) {
   _bookGenMode = opt;
   var optA = document.getElementById('genOptA');
   var optB = document.getElementById('genOptB');
+  var optC = document.getElementById('genOptC');
   var autoSec  = document.getElementById('bookAutoSection');
   var manualSec = document.getElementById('bookManualSection');
+  var sourceSec = document.getElementById('bookSourceSection');
   var btnStart  = document.getElementById('btnStartBook');
 
   if (optA)  optA.classList.toggle('selected', opt === 'A');
   if (optB)  optB.classList.toggle('selected', opt === 'B');
+  if (optC)  optC.classList.toggle('selected', opt === 'C');
   if (autoSec)   autoSec.style.display   = opt === 'A' ? '' : 'none';
   if (manualSec) manualSec.classList.toggle('active', opt === 'B');
+  if (sourceSec) sourceSec.style.display = opt === 'C' ? '' : 'none';
 
   if (btnStart) {
-    btnStart.textContent = opt === 'A' ? '✨ Generate Otomatis' : '🚀 Mulai Generate Buku';
+    btnStart.textContent = opt === 'A' ? '✨ Generate Otomatis'
+      : opt === 'C' ? '🚀 Analisis & Susun Buku'
+      : '🚀 Mulai Generate Buku';
   }
   if (opt === 'B') renderChapterEditor();
 }
@@ -17724,6 +17898,200 @@ function onBookTitleInput(val) {
 }
 
 // ── Generate outline FULL hirarkis via AI (Opsi A) ──────────────
+// ════════════════════════════════════════════════════════════════════════════
+// BOOK MODE — OPSI C: INPUT MANUAL KUSTOM DARI FILE SUMBER (FITUR v10.8)
+// Unggah 1+ file (.txt/.md/.csv/.json/.html/.docx/.pdf) → ekstraksi teks →
+// AI menganalisis & menyusun sistematika buku berbasis sumber → generate bab
+// secara integratif, sistematis, koheren dari materi sumber + Hexa-Source.
+// Parser .docx/.pdf dimuat LAZY dari CDN saat dibutuhkan; jika gagal, ada
+// fallback tempel-teks sehingga alur tak pernah macet.
+// ════════════════════════════════════════════════════════════════════════════
+var _bookSourceFiles = [];
+
+function _lazyLoadScript(url) {
+  return new Promise(function (resolve, reject) {
+    try {
+      var existing = document.querySelector('script[data-lazy="' + url + '"]');
+      if (existing) {
+        if (existing.getAttribute('data-loaded') === '1') { resolve(); return; }
+        existing.addEventListener('load', function () { resolve(); });
+        existing.addEventListener('error', function () { reject(new Error('load fail')); });
+        return;
+      }
+      var s = document.createElement('script');
+      s.src = url; s.async = true; s.setAttribute('data-lazy', url);
+      s.onload = function () { s.setAttribute('data-loaded', '1'); resolve(); };
+      s.onerror = function () { reject(new Error('Gagal memuat pustaka: ' + url)); };
+      document.head.appendChild(s);
+    } catch (e) { reject(e); }
+  });
+}
+
+function _readTextFile(file) {
+  return new Promise(function (resolve, reject) {
+    var fr = new FileReader();
+    fr.onload = function () { resolve(String(fr.result || '')); };
+    fr.onerror = function () { reject(new Error('Gagal membaca ' + file.name)); };
+    fr.readAsText(file, 'utf-8');
+  });
+}
+
+async function _readDocxFile(file) {
+  await _lazyLoadScript('https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js');
+  if (typeof mammoth === 'undefined') throw new Error('Pustaka .docx tidak tersedia');
+  var ab = await file.arrayBuffer();
+  var res = await mammoth.extractRawText({ arrayBuffer: ab });
+  return (res && res.value) ? res.value : '';
+}
+
+async function _readPdfFile(file) {
+  await _lazyLoadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+  if (typeof pdfjsLib === 'undefined') throw new Error('Pustaka .pdf tidak tersedia');
+  try { pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; } catch (e) {}
+  var ab = await file.arrayBuffer();
+  var pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+  var text = '';
+  var maxPages = Math.min(pdf.numPages, 100);
+  for (var p = 1; p <= maxPages; p++) {
+    var page = await pdf.getPage(p);
+    var content = await page.getTextContent();
+    text += content.items.map(function (it) { return it.str; }).join(' ') + '\n\n';
+  }
+  return text;
+}
+
+async function handleBookSourceFiles(input) {
+  var files = Array.prototype.slice.call(input.files || []);
+  if (!files.length) return;
+  for (var i = 0; i < files.length; i++) {
+    var f = files[i];
+    var ext = (f.name.split('.').pop() || '').toLowerCase();
+    var entry = { name: f.name, size: f.size, text: '', status: 'reading', ext: ext, chars: 0 };
+    _bookSourceFiles.push(entry);
+    renderBookSourceList();
+    try {
+      var txt = '';
+      if (['txt', 'md', 'markdown', 'csv', 'json', 'html', 'htm'].indexOf(ext) >= 0) txt = await _readTextFile(f);
+      else if (ext === 'docx') txt = await _readDocxFile(f);
+      else if (ext === 'pdf') txt = await _readPdfFile(f);
+      else txt = await _readTextFile(f);
+      if (ext === 'html' || ext === 'htm') txt = txt.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ');
+      entry.text = String(txt || '').replace(/[ \t]+\n/g, '\n').trim();
+      entry.chars = entry.text.length;
+      entry.status = entry.chars > 0 ? 'done' : 'empty';
+    } catch (e) {
+      entry.status = 'error';
+      entry.error = e.message || 'gagal';
+    }
+    renderBookSourceList();
+    updateBookSourceMeta();
+  }
+  input.value = '';
+}
+
+function removeBookSourceFile(idx) {
+  _bookSourceFiles.splice(idx, 1);
+  renderBookSourceList();
+  updateBookSourceMeta();
+}
+
+function renderBookSourceList() {
+  var host = document.getElementById('bookSourceList');
+  if (!host) return;
+  if (!_bookSourceFiles.length) { host.innerHTML = ''; return; }
+  host.innerHTML = _bookSourceFiles.map(function (f, i) {
+    var badge = f.status === 'done' ? '<span style="color:#22c55e;">✓ ' + (f.chars || 0).toLocaleString() + ' karakter</span>'
+      : f.status === 'reading' ? '<span style="color:#f59e0b;">⏳ membaca…</span>'
+      : f.status === 'empty' ? '<span style="color:#f59e0b;">⚠ kosong</span>'
+      : '<span style="color:#ef4444;">✗ ' + (f.error || 'gagal') + ' — coba tempel teksnya</span>';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg2,rgba(255,255,255,.03));border:1px solid var(--border);border-radius:6px;margin-bottom:5px;">' +
+      '<span style="font-size:1rem;">' + (f.ext === 'pdf' ? '📕' : f.ext === 'docx' ? '📘' : '📄') + '</span>' +
+      '<div style="flex:1;min-width:0;"><div style="font-size:.8rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(f.name) + '</div>' +
+      '<div style="font-size:.68rem;">' + badge + '</div></div>' +
+      '<button class="btn-icon" onclick="removeBookSourceFile(' + i + ')" title="Hapus">×</button>' +
+    '</div>';
+  }).join('');
+}
+
+function updateBookSourceMeta() {
+  var el = document.getElementById('bookSourceMeta');
+  if (!el) return;
+  var total = getBookSourceText().length;
+  var nFiles = _bookSourceFiles.filter(function (f) { return f.status === 'done'; }).length;
+  if (total < 1) { el.textContent = 'Belum ada materi sumber.'; return; }
+  el.innerHTML = '📊 Total materi sumber: <strong>' + total.toLocaleString() + ' karakter</strong> dari ' + nFiles + ' file' +
+    (total > 15000 ? ' <span style="color:#f59e0b;">(akan dianalisis hingga ~15.000 karakter teratas untuk sistematika)</span>' : '') + '.';
+}
+
+function getBookSourceText() {
+  var parts = [];
+  _bookSourceFiles.forEach(function (f) { if (f.text) parts.push('### Sumber: ' + f.name + '\n' + f.text); });
+  var pasteEl = document.getElementById('bookSourcePaste');
+  var paste = pasteEl ? pasteEl.value.trim() : '';
+  if (paste) parts.push('### Sumber: (teks tempel)\n' + paste);
+  return parts.join('\n\n');
+}
+
+// Analisis materi sumber → sistematika buku 3 level (mirroring generateBookOutlineFull).
+async function generateBookOutlineFromSource(title, sourceText) {
+  if (typeof _checkQuotaBeforeGenerate === 'function' && !_checkQuotaBeforeGenerate()) return null;
+  var typeEl = document.getElementById('bookType');
+  var type = typeEl ? typeEl.value : 'academic';
+  setLoading(true);
+  toast('🔎 AI menganalisis materi sumber & menyusun sistematika...', 3500);
+  var typeLabels = { academic: 'buku akademis ilmiah', popular: 'buku populer-ilmiah', textbook: 'buku teks/ajar', monograph: 'monografi', thesis: 'tesis/disertasi' };
+  var srcExcerpt = String(sourceText || '').slice(0, 14000);
+  try {
+    var r = await callGAS({
+      action: 'ai_write', model: 'google/gemini-2.5-pro-preview',
+      system: 'Kamu editor buku senior. ANALISIS materi sumber lalu susun sistematika buku 3 level yang benar-benar MENCERMINKAN, MENGINTEGRASIKAN, dan MENGORGANISIR isi sumber secara sistematis-koheren. ' +
+              'ATURAN: Balas HANYA JSON array tanpa teks lain. ' +
+              'Format: [{"title":"...","wt":5000,"subs":[{"title":"...","subsubs":["...","..."]}]}]. ' +
+              'Setiap bab 3-5 subbab; tiap subbab 2-3 sub-subbab. wt = target kata per bab (3000-8000). ' +
+              'Judul bab/subbab SPESIFIK sesuai tema nyata yang ada di materi sumber (bukan generik).',
+      messages: [{
+        role: 'user',
+        content: 'Judul buku: "' + title + '"\nTipe: ' + (typeLabels[type] || type) +
+                 '\n\n=== MATERI SUMBER (analisis untuk menyusun sistematika buku) ===\n' + srcExcerpt +
+                 '\n\nBuat JSON sistematika 3 level yang mengintegrasikan materi di atas. Balas JSON saja.'
+      }],
+      temperature: 1.0, max_tokens: 2800
+    }, 120000);
+
+    if (r && r.success && r.content) {
+      var raw = r.content.replace(/```json|```/g, '').trim();
+      var s = raw.indexOf('['), e = raw.lastIndexOf(']');
+      if (s !== -1 && e !== -1 && e > s) raw = raw.slice(s, e + 1);
+      var parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length >= 2) {
+        tempChapters = parsed.map(function (ch) {
+          var subsubs = {}, subs = [];
+          if (Array.isArray(ch.subs)) {
+            ch.subs.forEach(function (sb, j) {
+              if (typeof sb === 'string') subs.push(sb);
+              else if (sb && sb.title) {
+                subs.push(sb.title);
+                if (Array.isArray(sb.subsubs) && sb.subsubs.length > 0)
+                  subsubs[String(j)] = sb.subsubs.map(function (ss) { return typeof ss === 'string' ? ss : (ss.title || String(ss)); });
+              }
+            });
+          }
+          return { title: ch.title || 'Bab', wt: ch.wt || 5000, subs: subs, subsubs: subsubs };
+        });
+        return tempChapters;
+      }
+    }
+    throw new Error('AI response tidak valid');
+  } catch (e) {
+    console.warn('[generateBookOutlineFromSource] fallback ke template:', e.message);
+    tempChapters = getOutlineBase(type);
+    toast('📋 Analisis sumber gagal; template outline diterapkan (' + tempChapters.length + ' bab). Silakan edit.', 4000);
+    return tempChapters;
+  } finally {
+    setLoading(false);
+  }
+}
+
 async function generateBookOutlineFull() {
   if (!_checkQuotaBeforeGenerate()) return;
   var titleEl = document.getElementById('bookTitle');
@@ -17922,6 +18290,30 @@ async function startBookProject() {
     await new Promise(function(res){ setTimeout(res, 800); });
   }
 
+  // ── OPSI C: analisis file sumber → susun sistematika → generate ──
+  var _srcMaterialForProject = '';
+  if (_bookGenMode === 'C') {
+    var _srcText = getBookSourceText();
+    if (!_srcText || _srcText.trim().length < 200) {
+      return toast('Unggah/tempel materi sumber yang memadai (± 200+ karakter) untuk Opsi C.', 5000);
+    }
+    _srcMaterialForProject = _srcText.slice(0, 15000);
+    var _chapC = await generateBookOutlineFromSource(title, _srcText);
+    if (!_chapC || _chapC.length < 1) return;   // setLoading ditangani di dalam
+    var manualSecC = document.getElementById('bookManualSection');
+    if (manualSecC) manualSecC.classList.add('active');
+    renderChapterEditor();
+    var _tSubC = 0, _tSSC = 0;
+    tempChapters.forEach(function(ch){
+      _tSubC += Array.isArray(ch.subs) ? ch.subs.length : 0;
+      if (ch.subsubs && typeof ch.subsubs === 'object') {
+        Object.keys(ch.subsubs).forEach(function(k){ if (Array.isArray(ch.subsubs[k])) _tSSC += ch.subsubs[k].length; });
+      }
+    });
+    toast('✅ Sistematika dari sumber siap: ' + tempChapters.length + ' bab · ' + _tSubC + ' subbab · ' + _tSSC + ' sub-subbab. Memulai generate...', 3200);
+    await new Promise(function(res){ setTimeout(res, 800); });
+  }
+
   // Sync semua input DOM → tempChapters
   bcSyncFromDOM();
 
@@ -17965,6 +18357,7 @@ async function startBookProject() {
       };
     })
   };
+  if (_srcMaterialForProject) bookProject.sourceMaterial = _srcMaterialForProject;
 
   saveBookProjectLocal();
   renderBookWorkspace();
@@ -18258,6 +18651,9 @@ async function sendBookChapter() {
     subListStr,
     contCtx ? `\n${contCtx}` : '',
     refCtx  ? `\n${refCtx}` : '',
+    (bookProject && bookProject.sourceMaterial)
+      ? `\n=== MATERI SUMBER (WAJIB DIINTEGRASIKAN) ===\nBuku ini dibangun dari materi sumber berikut. Sintesiskan, organisir, dan kembangkan bab ini secara INTEGRATIF, SISTEMATIS, KOHEREN, dan KOHESIF dari materi ini (jangan sekadar menyalin; olah menjadi narasi ilmiah yang mengalir). Utamakan substansi, istilah, data, dan argumen yang ada dalam sumber:\n"""\n${String(bookProject.sourceMaterial).slice(0, 8000)}\n"""`
+      : '',
     input   ? `\nINSTRUKSI KHUSUS BAB INI: ${input}` : '',
     `\nTUGAS: Tulis Bab ${ch.num} "${ch.title}" secara LENGKAP dan UTUH dalam ${langMap[lang]||'Bahasa Indonesia'}.`,
     `Gunakan gaya ${typeMap[type]||'akademis'} yang konsisten dengan seluruh buku.`,
@@ -18325,6 +18721,8 @@ async function sendBookChapter() {
     var _bookLang  = lang;
     var _bookCite2 = getBookCite();
     var _bookEnriched = await runGrokGroundingSegment(_bookRaw, _bookTitle, _bookLang, _bookCite2, ch.title);
+    // FITUR v10.8: konsistensi gaya sitasi (anti gaya-ganda) per bab.
+    try { _bookEnriched = enforceCitationStyle(_bookEnriched, _bookCite2); } catch (_ce) {}
 
     ch.content    = _bookEnriched;
     ch.wc         = countWords(_bookEnriched);
