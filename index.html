@@ -3657,9 +3657,9 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
                      onclick="document.getElementById('bookSourceFiles').click()">
                   <div style="font-size:1.6rem;">⬆️</div>
                   <div style="font-size:.82rem;color:var(--text2);font-weight:600;">Klik untuk unggah file sumber</div>
-                  <div style="font-size:.7rem;color:var(--text3);margin-top:3px;">.txt · .md · .csv · .json · .html · .docx · .pdf — bisa beberapa file sekaligus</div>
+                  <div style="font-size:.7rem;color:var(--text3);margin-top:3px;">.txt · .md · .csv · .json · .html · .doc · .docx · .pdf — bisa beberapa file sekaligus</div>
                 </div>
-                <input type="file" id="bookSourceFiles" multiple accept=".txt,.md,.markdown,.csv,.json,.html,.htm,.docx,.pdf,text/plain"
+                <input type="file" id="bookSourceFiles" multiple accept=".txt,.md,.markdown,.csv,.json,.html,.htm,.doc,.docx,.pdf,text/plain,application/msword"
                        style="display:none;" onchange="handleBookSourceFiles(this)">
                 <div id="bookSourceList" style="margin-top:10px;"></div>
                 <label style="font-weight:700;display:block;margin:12px 0 6px;font-size:.8rem;">Atau tempel teks sumber tambahan (opsional)</label>
@@ -4163,12 +4163,12 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
                 <span id="paraInputCounter" style="font-size:.65rem;color:var(--text3);">0 kata</span>
               </div>
             </div>
-            <input type="file" id="paraSourceFiles" multiple accept=".txt,.md,.markdown,.csv,.json,.html,.htm,.docx,.pdf,text/plain"
+            <input type="file" id="paraSourceFiles" multiple accept=".txt,.md,.markdown,.csv,.json,.html,.htm,.doc,.docx,.pdf,text/plain,application/msword"
                    style="display:none;" onchange="handleParaSourceFiles(this)">
             <div id="paraSourceStatus" style="font-size:.68rem;color:#818cf8;margin-bottom:6px;min-height:0;"></div>
             <textarea id="paraInput" rows="9"
               style="resize:vertical;"
-              placeholder="Tempel teks akademis di sini, atau klik 📎 Unggah File untuk memuat naskah (.txt / .md / .docx / .pdf) yang akan dibaca & dikondensasi secara utuh..."
+              placeholder="Tempel teks akademis di sini, atau klik 📎 Unggah File untuk memuat naskah (.txt / .md / .doc / .docx / .pdf) yang akan dibaca & dikondensasi secara utuh..."
               oninput="updateParaCounter(this)"
               ondragover="_paraDragOver(event)" ondragleave="_paraDragLeave(event)" ondrop="_paraDrop(event)"></textarea>
           </div>
@@ -14284,6 +14284,7 @@ async function handleParaSourceFiles(input) {
     try {
       var txt = '';
       if (['txt', 'md', 'markdown', 'csv', 'json', 'html', 'htm'].indexOf(ext) >= 0) txt = await _readTextFile(f);
+      else if (ext === 'doc') txt = await _readDocFile(f);
       else if (ext === 'docx') txt = await _readDocxFile(f);
       else if (ext === 'pdf') txt = await _readPdfFile(f);
       else txt = await _readTextFile(f);
@@ -18370,6 +18371,252 @@ function _lazyLoadScript(url) {
   });
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// LEGACY .doc (Word 97-2003, OLE2/CFB biner) TEXT EXTRACTOR — pure JS
+// Membaca Compound File Binary → stream WordDocument + Table → FIB → piece table
+// (CLX/PlcPcd) → ekstraksi teks (CP1252 terkompresi / UTF-16LE) → bersihkan
+// karakter kontrol & field-code. Fallback heuristik bila piece-table gagal.
+// ════════════════════════════════════════════════════════════════════════════
+
+// ── Windows-1252 high-byte map (0x80–0x9F berbeda dari Latin-1) ──
+var _CP1252 = {
+  0x80:'\u20AC',0x82:'\u201A',0x83:'\u0192',0x84:'\u201E',0x85:'\u2026',0x86:'\u2020',
+  0x87:'\u2021',0x88:'\u02C6',0x89:'\u2030',0x8A:'\u0160',0x8B:'\u2039',0x8C:'\u0152',
+  0x8E:'\u017D',0x91:'\u2018',0x92:'\u2019',0x93:'\u201C',0x94:'\u201D',0x95:'\u2022',
+  0x96:'\u2013',0x97:'\u2014',0x98:'\u02DC',0x99:'\u2122',0x9A:'\u0161',0x9B:'\u203A',
+  0x9C:'\u0153',0x9E:'\u017E',0x9F:'\u0178'
+};
+function _cp1252Char(b) {
+  if (b >= 0x80 && b <= 0x9F) return _CP1252[b] || '';
+  return String.fromCharCode(b);
+}
+
+function _readCFB(buf) {
+  var dv = new DataView(buf);
+  if (dv.getUint32(0, false) !== 0xD0CF11E0) throw new Error('Bukan file OLE2/CFB');
+  var secShift = dv.getUint16(0x1E, true);
+  var secSize = 1 << secShift;             // biasanya 512
+  var miniShift = dv.getUint16(0x20, true);
+  var miniSecSize = 1 << miniShift;        // biasanya 64
+  var numFatSec = dv.getUint32(0x2C, true);
+  var firstDirSec = dv.getUint32(0x30, true);
+  var miniCutoff = dv.getUint32(0x38, true);
+  var firstMiniFat = dv.getUint32(0x3C, true);
+  var numMiniFat = dv.getUint32(0x40, true);
+  var firstDifat = dv.getUint32(0x44, true);
+  var numDifat = dv.getUint32(0x48, true);
+
+  var secOffset = function (s) { return (s + 1) * secSize; };
+
+  // ── Build DIFAT (list of FAT sector numbers) ──
+  var difat = [];
+  for (var i = 0; i < 109; i++) {
+    var v = dv.getUint32(0x4C + i * 4, true);
+    if (v === 0xFFFFFFFF) break;
+    difat.push(v);
+  }
+  var difatSec = firstDifat;
+  var guard = 0;
+  while (difatSec !== 0xFFFFFFFE && difatSec !== 0xFFFFFFFF && guard++ < 100000) {
+    var base = secOffset(difatSec);
+    var entriesPerSec = secSize / 4 - 1;
+    for (var j = 0; j < entriesPerSec; j++) {
+      var val = dv.getUint32(base + j * 4, true);
+      if (val !== 0xFFFFFFFF) difat.push(val);
+    }
+    difatSec = dv.getUint32(base + (secSize - 4), true);
+  }
+
+  // ── Build FAT (array of next-sector links) ──
+  var fat = [];
+  for (var k = 0; k < difat.length; k++) {
+    var fbase = secOffset(difat[k]);
+    for (var m = 0; m < secSize / 4; m++) fat.push(dv.getUint32(fbase + m * 4, true));
+  }
+
+  // ── Follow a FAT chain, return concatenated bytes ──
+  function readChain(startSec, size) {
+    var out = [];
+    var sec = startSec, g = 0;
+    while (sec !== 0xFFFFFFFE && sec !== 0xFFFFFFFF && g++ < 1000000) {
+      var off = secOffset(sec);
+      for (var b = 0; b < secSize; b++) out.push(dv.getUint8(off + b));
+      sec = fat[sec];
+      if (sec === undefined) break;
+    }
+    if (size != null && size >= 0) out = out.slice(0, size);
+    return out;
+  }
+
+  // ── Read directory entries ──
+  var dirBytes = readChain(firstDirSec, null);
+  var dirDV = new DataView(new Uint8Array(dirBytes).buffer);
+  var entries = [];
+  var numEntries = Math.floor(dirBytes.length / 128);
+  for (var e = 0; e < numEntries; e++) {
+    var o = e * 128;
+    var nameLen = dirDV.getUint16(o + 0x40, true);
+    var type = dirDV.getUint8(o + 0x42);
+    if (type === 0) continue;
+    var name = '';
+    for (var c = 0; c < nameLen - 2 && c < 64; c += 2) {
+      var ch = dirDV.getUint16(o + c, true);
+      if (ch) name += String.fromCharCode(ch);
+    }
+    entries.push({
+      name: name, type: type,
+      startSec: dirDV.getUint32(o + 0x74, true),
+      size: dirDV.getUint32(o + 0x78, true)
+    });
+  }
+
+  // ── Mini stream (owned by root, type 5) ──
+  var root = null;
+  for (var r = 0; r < entries.length; r++) if (entries[r].type === 5) { root = entries[r]; break; }
+  var miniStream = root ? readChain(root.startSec, root.size) : [];
+
+  // ── Mini FAT ──
+  var miniFat = [];
+  if (firstMiniFat !== 0xFFFFFFFE && numMiniFat > 0) {
+    var mfBytes = readChain(firstMiniFat, numMiniFat * secSize);
+    var mfDV = new DataView(new Uint8Array(mfBytes).buffer);
+    for (var mm = 0; mm < mfBytes.length / 4; mm++) miniFat.push(mfDV.getUint32(mm * 4, true));
+  }
+  function readMiniChain(startSec, size) {
+    var out = [];
+    var sec = startSec, g = 0;
+    while (sec !== 0xFFFFFFFE && sec !== 0xFFFFFFFF && g++ < 1000000) {
+      var off = sec * miniSecSize;
+      for (var b = 0; b < miniSecSize; b++) out.push(miniStream[off + b] || 0);
+      sec = miniFat[sec];
+      if (sec === undefined) break;
+    }
+    if (size != null) out = out.slice(0, size);
+    return out;
+  }
+
+  function getStream(name) {
+    for (var i2 = 0; i2 < entries.length; i2++) {
+      if (entries[i2].name === name && entries[i2].type === 2) {
+        var en = entries[i2];
+        return (en.size < miniCutoff) ? readMiniChain(en.startSec, en.size) : readChain(en.startSec, en.size);
+      }
+    }
+    return null;
+  }
+  return { getStream: getStream, entries: entries };
+}
+
+// ── Ekstraksi teks dari .doc ──
+function extractDocText(buf) {
+  var cfb = _readCFB(buf);
+  var wd = cfb.getStream('WordDocument');
+  if (!wd) throw new Error('Stream WordDocument tidak ditemukan');
+  var wdDV = new DataView(new Uint8Array(wd).buffer);
+
+  // FIB
+  var flags = wdDV.getUint16(0x0A, true);
+  var fWhichTblStm = (flags & 0x0200) ? 1 : 0;
+  var tableName = fWhichTblStm ? '1Table' : '0Table';
+  var tableStream = cfb.getStream(tableName) || cfb.getStream(fWhichTblStm ? '0Table' : '1Table');
+
+  var fcClx = wdDV.getUint32(0x01A2, true);
+  var lcbClx = wdDV.getUint32(0x01A6, true);
+  var ccpText = wdDV.getUint32(0x004C, true);
+
+  var text = '';
+
+  if (tableStream && lcbClx > 0 && fcClx + lcbClx <= tableStream.length) {
+    // Parse CLX → temukan Pcdt (0x02) → PlcPcd
+    var clx = tableStream.slice(fcClx, fcClx + lcbClx);
+    var pos = 0;
+    // Lewati Prc (0x01 ... ) hingga menemukan 0x02 (Pcdt)
+    while (pos < clx.length && clx[pos] === 0x01) {
+      var prcDV = new DataView(new Uint8Array(clx.slice(pos + 1, pos + 3)).buffer);
+      var cbGrpprl = prcDV.getUint16(0, true);
+      pos += 3 + cbGrpprl;
+    }
+    if (clx[pos] === 0x02) {
+      var pcdtDV = new DataView(new Uint8Array(clx.slice(pos + 1, pos + 5)).buffer);
+      var lcbPlcfpcd = pcdtDV.getUint32(0, true);
+      var plc = clx.slice(pos + 5, pos + 5 + lcbPlcfpcd);
+      var plcDV = new DataView(new Uint8Array(plc).buffer);
+      // n pieces: (lcb - 4) / (4 + 8)
+      var nPieces = Math.floor((lcbPlcfpcd - 4) / 12);
+      var cpArr = [];
+      for (var p = 0; p <= nPieces; p++) cpArr.push(plcDV.getUint32(p * 4, true));
+      var pcdBase = (nPieces + 1) * 4;
+      for (var pi = 0; pi < nPieces; pi++) {
+        var pcdOff = pcdBase + pi * 8;
+        var fcRaw = plcDV.getUint32(pcdOff + 2, true);
+        var fCompressed = (fcRaw & 0x40000000) !== 0;
+        var fc = fcRaw & 0x3FFFFFFF;
+        var cpStart = cpArr[pi], cpEnd = cpArr[pi + 1];
+        var nChars = cpEnd - cpStart;
+        if (fCompressed) {
+          var byteOff = fc / 2;
+          for (var ci = 0; ci < nChars; ci++) text += _cp1252Char(wd[byteOff + ci] || 0);
+        } else {
+          for (var ui = 0; ui < nChars; ui++) {
+            var code = (wd[fc + ui * 2] || 0) | ((wd[fc + ui * 2 + 1] || 0) << 8);
+            text += String.fromCharCode(code);
+          }
+        }
+      }
+    }
+  }
+
+  // Fallback: bila piece-table gagal, ambil rentang fcMin..fcMac sebagai CP1252.
+  if (!text || text.replace(/\s/g, '').length < 20) {
+    var fcMin = wdDV.getUint32(0x0018, true);
+    var fcMac = wdDV.getUint32(0x001C, true);
+    if (fcMac > fcMin && fcMac <= wd.length) {
+      text = '';
+      for (var f = fcMin; f < fcMac; f++) text += _cp1252Char(wd[f] || 0);
+    }
+  }
+
+  return _cleanDocText(text);
+}
+
+// ── Bersihkan karakter kontrol Word & field-code ──
+function _cleanDocText(t) {
+  if (!t) return '';
+  var out = '';
+  var inFieldInstr = false;
+  for (var i = 0; i < t.length; i++) {
+    var code = t.charCodeAt(i);
+    if (code === 0x13) { inFieldInstr = true; continue; }   // field begin → mulai instruksi (skip)
+    if (code === 0x14) { inFieldInstr = false; continue; }  // field separator → mulai hasil (keep)
+    if (code === 0x15) { inFieldInstr = false; continue; }  // field end
+    if (inFieldInstr) continue;                              // buang teks instruksi field (mis. HYPERLINK "...")
+    if (code === 0x0D || code === 0x0C) { out += '\n\n'; continue; }  // akhir paragraf / page break → paragraf baru
+    if (code === 0x07 || code === 0x0B) { out += '\n'; continue; }    // cell/row / line break → baris baru
+    if (code === 0x1E) { out += '-'; continue; }             // non-breaking hyphen
+    if (code === 0x1F) { continue; }                          // optional hyphen
+    if (code === 0x08 || code === 0x01 || code === 0x02 || code === 0x05) continue; // control/embed
+    if (code === 0x09) { out += '\t'; continue; }
+    if (code < 0x20 && code !== 0x0A) continue;              // sisa kontrol → buang
+    if (code === 0xFEFF || code === 0xFFFE) continue;        // BOM
+    out += t[i];
+  }
+  // Rapikan: normalisasi newline, spasi berlebih, pertahankan batas paragraf.
+  out = out.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+           .replace(/[ \t]+/g, ' ')
+           .replace(/[ \t]*\n[ \t]*/g, '\n')
+           .replace(/\n{3,}/g, '\n\n')
+           .trim();
+  return out;
+}
+
+// Baca file .doc (Word 97-2003 biner) → teks bersih via extractDocText.
+async function _readDocFile(file) {
+  var ab = await file.arrayBuffer();
+  var text = extractDocText(ab);
+  if (!text || text.replace(/\s/g, '').length < 20) throw new Error('teks .doc tak terbaca');
+  return text;
+}
+
 function _readTextFile(file) {
   return new Promise(function (resolve, reject) {
     var fr = new FileReader();
@@ -18415,6 +18662,7 @@ async function handleBookSourceFiles(input) {
     try {
       var txt = '';
       if (['txt', 'md', 'markdown', 'csv', 'json', 'html', 'htm'].indexOf(ext) >= 0) txt = await _readTextFile(f);
+      else if (ext === 'doc') txt = await _readDocFile(f);
       else if (ext === 'docx') txt = await _readDocxFile(f);
       else if (ext === 'pdf') txt = await _readPdfFile(f);
       else txt = await _readTextFile(f);
