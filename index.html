@@ -4154,14 +4154,23 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
 
           <!-- Input area -->
           <div style="margin-bottom:14px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px;">
               <label style="font-size:.72rem;">Teks Asli</label>
-              <span id="paraInputCounter" style="font-size:.65rem;color:var(--text3);">0 kata</span>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <button type="button" class="btn btn-sm btn-secondary" style="padding:3px 10px;font-size:.7rem;"
+                  onclick="document.getElementById('paraSourceFiles').click()"
+                  title="Unggah file naskah (.txt .md .csv .json .html .docx .pdf) untuk dibaca & dikondensasi utuh">📎 Unggah File</button>
+                <span id="paraInputCounter" style="font-size:.65rem;color:var(--text3);">0 kata</span>
+              </div>
             </div>
+            <input type="file" id="paraSourceFiles" multiple accept=".txt,.md,.markdown,.csv,.json,.html,.htm,.docx,.pdf,text/plain"
+                   style="display:none;" onchange="handleParaSourceFiles(this)">
+            <div id="paraSourceStatus" style="font-size:.68rem;color:#818cf8;margin-bottom:6px;min-height:0;"></div>
             <textarea id="paraInput" rows="9"
               style="resize:vertical;"
-              placeholder="Tempel teks akademis yang ingin ditransformasi..."
-              oninput="updateParaCounter(this)"></textarea>
+              placeholder="Tempel teks akademis di sini, atau klik 📎 Unggah File untuk memuat naskah (.txt / .md / .docx / .pdf) yang akan dibaca & dikondensasi secara utuh..."
+              oninput="updateParaCounter(this)"
+              ondragover="_paraDragOver(event)" ondragleave="_paraDragLeave(event)" ondrop="_paraDrop(event)"></textarea>
           </div>
 
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -7791,6 +7800,216 @@ let lastValidatedOutput = '';    // Teks output terakhir setelah validasi
  * Ekstrak kata kunci cerdas dari judul + instruksi (multi-bahasa).
  * Membuang stopwords ID/EN/AR, ambil noun phrases penting.
  */
+// ════════════════════════════════════════════════════════════════════════════
+// TOPIC-CORE & PRECISION RELEVANCE ENGINE (FITUR v10.9)
+// Menangkap SUBJEK UTAMA judul/topik (bukan sekadar memecah kata) lalu menyaring
+// & merangking referensi agar benar-benar relevan-presisi terhadap subjek itu.
+// Pola "A B" (Indonesia) umumnya bermakna "A dari/atas B":
+//   • "filsafat sejarah"  → subjek inti = "sejarah"  (filsafat = lensa/pendekatan)
+//   • "sejarah filsafat"  → subjek inti = "filsafat" (sejarah  = lensa/pendekatan)
+//   • "ekonomi Islam"     → subjek inti = "ekonomi"  (Islam = kualifikator/adjektiva)
+// ════════════════════════════════════════════════════════════════════════════
+
+// Kata "lensa/pendekatan" — bila menjadi kata PERTAMA pada pasangan "A B", maka
+// kata kedua adalah subjek/objek yang dikaji.
+var _LENS_WORDS = new Set([
+  'filsafat','filosofi','sejarah','sosiologi','psikologi','antropologi','teologi',
+  'teori','teorisasi','metodologi','metode','analisis','kajian','studi','tinjauan',
+  'telaah','dinamika','perkembangan','pemikiran','gagasan','konsep','konsepsi',
+  'kritik','hermeneutika','fenomenologi','epistemologi','ontologi','aksiologi',
+  'paradigma','model','sistem','pola','prinsip','pengantar','dasar','geografi',
+  'geneologi','genealogi','tipologi','morfologi','fungsi','peran','kedudukan',
+  'pendidikan','pembelajaran','pengajaran','pelatihan','pengembangan','manajemen',
+  'pengelolaan','penerapan','implementasi','pengaruh','dampak','hubungan','relasi',
+  'transformasi','rekonstruksi','revitalisasi','internalisasi','integrasi',
+  'education','learning','teaching','management','development','implementation',
+  'impact','influence','relationship','transformation','integration',
+  'philosophy','history','sociology','psychology','anthropology','theology',
+  'theory','methodology','method','analysis','study','review','dynamics',
+  'development','concept','critique','hermeneutics','phenomenology','epistemology',
+  'ontology','paradigm','introduction','principles','typology','morphology'
+]);
+
+// Kata "kualifikator/adjektiva" — bila menjadi kata KEDUA, ia menyifati kata
+// pertama (kata pertama tetap subjek inti).
+var _QUALIFIER_WORDS = new Set([
+  'islam','islami','islamic','muslim','kristen','katolik','protestan','hindu',
+  'buddha','modern','klasik','kontemporer','contemporary','tradisional',
+  'traditional','digital','nasional','national','internasional','international',
+  'global','lokal','local','indonesia','indonesian','nusantara','barat','western',
+  'timur','eastern','syariah','syari','shariah','konvensional','conventional',
+  'positif','normatif','empiris','teoretis','praktis','terapan','murni','umum',
+  'khusus','klasikal','kolonial','pascakolonial','postkolonial','pramodern'
+]);
+
+var _TOPIC_STOP = new Set([
+  'dan','atau','yang','untuk','dari','pada','dalam','dengan','adalah','ini','itu',
+  'ke','di','oleh','sebagai','serta','akan','juga','dapat','tidak','telah','bagi',
+  'tentang','antara','melalui','atas','bahwa','terhadap','sebuah','suatu','para',
+  'the','a','an','of','in','on','at','to','for','with','by','and','or','that',
+  'this','is','are','study','analysis','case','based','review','toward','towards'
+]);
+
+function _normTopic(s) {
+  return String(s || '').toLowerCase()
+    .replace(/[\u2018\u2019']/g, "'")
+    .replace(/[^a-z0-9\u0600-\u06FF\s'-]/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+
+// Analisis struktur topik → subjek inti + istilah wajib.
+function analyzeTopicStructure(title, lang) {
+  var norm = _normTopic(title);
+  var rawWords = norm.split(/\s+/).filter(Boolean);
+  var content = rawWords.filter(function (w) { return w.length >= 3 && !_TOPIC_STOP.has(w); });
+
+  var result = {
+    phrase: norm,
+    contentWords: content,
+    coreSubject: content[0] || norm,
+    lensWord: null,
+    qualifier: null,
+    coreTerms: content.slice()
+  };
+  if (!content.length) { result.coreSubject = norm; result.coreTerms = norm ? [norm] : []; return result; }
+
+  // Kasus dua kata konten "A B".
+  if (content.length === 2) {
+    var a = content[0], b = content[1];
+    if (_QUALIFIER_WORDS.has(b)) {
+      result.coreSubject = a; result.qualifier = b;           // "ekonomi Islam" → ekonomi
+    } else if (_LENS_WORDS.has(a)) {
+      result.coreSubject = b; result.lensWord = a;            // "filsafat sejarah" → sejarah
+    } else if (_LENS_WORDS.has(b)) {
+      result.coreSubject = a; result.lensWord = b;            // "A kajian" → A
+    } else {
+      result.coreSubject = a;                                  // default: kepala di depan (hukum DM)
+    }
+    result.coreTerms = [a, b];
+    return result;
+  }
+
+  // ≥3 kata konten: tentukan subjek inti dengan heuristik lensa/kualifikator.
+  // Ambil frasa inti = kata konten non-lensa & non-kualifikator (paling bermakna).
+  var meaningful = content.filter(function (w) { return !_LENS_WORDS.has(w) && !_QUALIFIER_WORDS.has(w); });
+  if (content.length >= 2 && _LENS_WORDS.has(content[0]) && !_QUALIFIER_WORDS.has(content[1])) {
+    result.coreSubject = content[1]; result.lensWord = content[0];
+  } else if (meaningful.length) {
+    result.coreSubject = meaningful[0];
+  } else {
+    result.coreSubject = content[0];
+  }
+  // coreTerms: utamakan kata bermakna; jika kosong, pakai semua konten.
+  result.coreTerms = meaningful.length ? meaningful.slice(0, 4) : content.slice(0, 4);
+  return result;
+}
+
+// Bangun daftar kueri berbasis struktur topik: frasa penuh (paling presisi) +
+// frasa inti (subjek + kata bermakna) → mempertahankan konteks, bukan kata lepas.
+function buildTopicQueries(title, topic) {
+  var qs = [];
+  var push = function (q) {
+    q = (q || '').trim();
+    if (q.length > 2 && qs.map(_normTopic).indexOf(_normTopic(q)) === -1) qs.push(q);
+  };
+  push(title.trim());                                   // 1) judul/frasa penuh
+  if (topic.coreTerms && topic.coreTerms.length >= 2) {
+    push(topic.coreTerms.join(' '));                    // 2) gabungan istilah inti
+  }
+  // 3) subjek inti + satu istilah bermakna lain (menjaga konteks, bukan 1 kata lepas)
+  if (topic.coreSubject) {
+    var other = (topic.coreTerms || []).filter(function (t) { return t !== topic.coreSubject; })[0];
+    push(other ? (topic.coreSubject + ' ' + other) : topic.coreSubject);
+  }
+  return qs;
+}
+
+// Skor relevansi PRESISI berbasis subjek inti + frasa + ekspansi konseptual.
+// Prinsip: referensi yang hanya mencocokkan kata LENSA (mis. "filsafat" saja pada
+// topik "filsafat sejarah") TIDAK dianggap relevan; subjek inti WAJIB hadir.
+function topicRelevanceScore(ref, topic, expansion) {
+  if (!topic) return 1;
+  var title = _normTopic(ref.title || '');
+  var abs   = _normTopic(ref.abstract || '');
+  var jour  = _normTopic(ref.journal || '');
+  var hay   = title + ' ' + abs + ' ' + jour;
+  if (!hay.trim()) return 0.5;
+
+  var score = 0;
+  var core = topic.coreSubject ? _normTopic(topic.coreSubject) : '';
+  var hasCore = false;
+
+  // (1) Subjek inti — bobot terbesar; wajib untuk relevansi tinggi.
+  if (core && core.length >= 3) {
+    if (title.indexOf(core) !== -1) { score += 5; hasCore = true; }
+    else if (abs.indexOf(core) !== -1) { score += 3; hasCore = true; }
+    else if (jour.indexOf(core) !== -1) { score += 1.5; hasCore = true; }
+  } else { hasCore = true; }
+
+  // (2) Frasa penuh / kedekatan seluruh istilah inti.
+  if (topic.phrase && topic.phrase.length >= 5 && hay.indexOf(topic.phrase) !== -1) score += 4;
+  var ctPresent = 0;
+  (topic.coreTerms || []).forEach(function (t) {
+    var tt = _normTopic(t);
+    if (tt.length >= 3 && hay.indexOf(tt) !== -1) ctPresent += 1;
+  });
+  if ((topic.coreTerms || []).length) {
+    score += ctPresent * 1.5;
+    // Bonus bila SEMUA istilah inti hadir (benar-benar on-topic).
+    if (ctPresent === topic.coreTerms.length && topic.coreTerms.length >= 2) score += 3;
+  }
+
+  // (3) Ekspansi konseptual multibahasa (sinonim id/en/ar) — penguat.
+  if (expansion && expansion.all && expansion.all.length) {
+    var matchedLangs = {};
+    ['id', 'en', 'ar'].forEach(function (L) {
+      (expansion[L] || []).forEach(function (term) {
+        var t = _normTopic(term);
+        if (t.length >= 3 && hay.indexOf(t) !== -1) { score += 0.75; matchedLangs[L] = true; }
+      });
+    });
+    if (Object.keys(matchedLangs).length > 1) score += 1;
+  }
+
+  // (4) Penalti: hanya mencocokkan kata lensa (tanpa subjek inti) → kemungkinan
+  // besar melenceng dari topik (mis. paper filsafat umum utk "filsafat sejarah").
+  if (topic.lensWord) {
+    var lens = _normTopic(topic.lensWord);
+    var lensPresent = lens && hay.indexOf(lens) !== -1;
+    if (lensPresent && !hasCore) score -= 3;
+  }
+
+  // (5) Bobot kualitas (sitasi/Scopus) HANYA diberikan bila ada relevansi topik.
+  // Ini mencegah paper bersitasi-tinggi tapi melenceng total ikut lolos gate.
+  if (score > 0.5) {
+    score += Math.min(1.5, Math.log10((ref.cited_by || 0) + 1) * 0.5);
+    if (ref.isScopus) score += 0.6;
+  }
+
+  return score < 0 ? 0 : score;
+}
+
+// Re-rank + gate lunak berbasis relevansi topik. Referensi dengan skor sangat
+// rendah (tanpa subjek inti) dibuang HANYA bila masih cukup kandidat relevan,
+// agar tidak pernah mengosongkan hasil (zero-regression pada kasus minim data).
+function rerankByTopic(refs, topic, expansion, opts) {
+  opts = opts || {};
+  if (!refs || !refs.length || !topic) return refs || [];
+  var scored = refs.map(function (r) {
+    return { ref: r, s: topicRelevanceScore(r, topic, expansion) };
+  });
+  scored.sort(function (a, b) { return b.s - a.s; });
+
+  var minKeep = opts.minKeep || 8;
+  var threshold = (typeof opts.threshold === 'number') ? opts.threshold : 1.0;
+  var relevant = scored.filter(function (x) { return x.s >= threshold; });
+  var chosen = (relevant.length >= Math.min(minKeep, scored.length)) ? relevant : scored;
+
+  return chosen.map(function (x) {
+    return Object.assign({}, x.ref, { _topicScore: Math.round(x.s * 10) / 10 });
+  });
+}
+
 function extractKeywords_(title, instructions, lang) {
   const stopID = new Set(['dan','atau','yang','untuk','dari','pada','dalam','dengan','adalah','ini','itu','ke','di','oleh','sebagai','serta','akan','juga','dapat','tidak','telah','bagi','tentang','antara','melalui','atas','bahwa','terhadap','sebuah','suatu']);
   const stopEN = new Set(['the','a','an','of','in','on','at','to','for','with','by','and','or','that','this','is','are','was','were','be','been','about','from','into','through','between','using','based','study','research','analysis','review','paper','article','journal']);
@@ -8675,15 +8894,21 @@ async function autoHarvestRefs_(title, instructions, lang, yearFrom, yearTo, tar
   if (el)  el.classList.add('active');
   if (txt) txt.textContent = '🔍 Hexa-Source Harvest: CrossRef + DOAJ + Europe PMC + OpenAlex + Scopus + Semantic Scholar...';
 
-  var queries  = extractKeywords_(title, instructions, lang);
+  // FITUR v10.9 — ANALISIS SUBJEK INTI: tangkap subjek utama judul (mis.
+  // "filsafat sejarah" → subjek "sejarah") agar kueri & penyaringan presisi.
+  var _topic = null;
+  try { _topic = analyzeTopicStructure(title, lang); } catch (_te) { _topic = null; }
+
+  var queries = _topic ? buildTopicQueries(title, _topic) : extractKeywords_(title, instructions, lang);
+  if (!queries || !queries.length) queries = extractKeywords_(title, instructions, lang);
 
   // FIX v10.6 — KUERI KONSEPTUAL MULTI-BAHASA: perkaya query dasar dengan
   // istilah konseptual ekuivalen id/en/ar memakai MESIN YANG SAMA dengan
-  // Reference Finder (poin 3 dari permintaan pengembangan), agar auto-harvest
-  // AI Writer juga menjangkau makna/konsep secara realtime, bukan cuma kata.
+  // Reference Finder, agar auto-harvest AI Writer juga menjangkau makna/konsep.
   // Non-fatal: jika ekspansi gagal, `queries` tetap seperti semula (zero-regression).
+  var _concept = null;
   try {
-    var _concept = await expandConceptualQuery_(title, lang);
+    _concept = await expandConceptualQuery_(title, lang);
     if (_concept && _concept.all && _concept.all.length) {
       var _extra = _concept.all.filter(function(t) { return queries.indexOf(t) === -1; }).slice(0, 3);
       queries = queries.concat(_extra);
@@ -8748,18 +8973,24 @@ async function autoHarvestRefs_(title, instructions, lang, yearFrom, yearTo, tar
     seen.add(key); return true;
   });
 
-  // Urutkan: Scopus-indexed dulu, lalu sitasi
-  unique.sort(function(a, b) {
-    var scA = a.isScopus ? 1 : 0;
-    var scB = b.isScopus ? 1 : 0;
-    if (scB !== scA) return scB - scA;
-    return (b.cited_by || 0) - (a.cited_by || 0);
-  });
+  // FITUR v10.9 — GATE RELEVANSI PRESISI: rangking berdasarkan kecocokan SUBJEK
+  // INTI + frasa + ekspansi konseptual, lalu buang yang melenceng dari topik
+  // (mis. paper filsafat umum untuk topik "filsafat sejarah"). Gate bersifat
+  // lunak: tidak pernah mengosongkan hasil bila kandidat relevan terbatas.
+  var ranked = unique;
+  try {
+    if (_topic) {
+      ranked = rerankByTopic(unique, _topic, _concept, { minKeep: Math.min(targetCount, 10), threshold: 1.5 });
+    }
+  } catch (_re) { ranked = unique; }
 
-  var final = unique.slice(0, targetCount);
+  // Setelah relevansi, jaga prioritas Scopus & sitasi HANYA di antara yang setara
+  // relevansinya (stable) — relevansi tetap penentu utama.
+  var final = ranked.slice(0, targetCount);
   var scC   = final.filter(function(r) { return r.isScopus; }).length;
   var s2C   = final.filter(function(r) { return r.source === 'Semantic Scholar'; }).length;
-  if (txt) txt.textContent = '✅ ' + final.length + ' referensi — Hexa-Source (termasuk ' + scC + ' Scopus-indexed, ' + s2C + ' Semantic Scholar)';
+  var _coreLabel = (_topic && _topic.coreSubject) ? ' · subjek: "' + _topic.coreSubject + '"' : '';
+  if (txt) txt.textContent = '✅ ' + final.length + ' referensi relevan — Hexa-Source (' + scC + ' Scopus, ' + s2C + ' S2)' + _coreLabel;
 
   return final;
 }
@@ -13454,6 +13685,10 @@ async function searchReferences() {
   const query = document.getElementById('refQuery').value.trim();
   if (!query) return toast('Masukkan kata kunci pencarian terlebih dahulu');
 
+  // FITUR v10.9 — analisis subjek inti kueri untuk penyaringan presisi.
+  let _rfTopic = null;
+  try { _rfTopic = analyzeTopicStructure(query, null); } catch (_te) { _rfTopic = null; }
+
   const rows      = parseInt(document.getElementById('refRows').value) || 20;
   const sort      = document.getElementById('refSort').value;
   const yearFrom  = document.getElementById('refSearchFrom').value;
@@ -13665,11 +13900,12 @@ async function searchReferences() {
       const ya = parseInt(b.year) || 0, yb = parseInt(a.year) || 0;
       return ya - yb;
     });
+  } else if (_rfTopic) {
+    // FITUR v10.9 — default "Relevansi": rangking berdasarkan SUBJEK INTI +
+    // frasa + ekspansi konseptual (presisi), lalu gate lunak membuang hasil
+    // yang melenceng dari subjek. Tidak pernah mengosongkan hasil.
+    filtered = rerankByTopic(filtered, _rfTopic, _rfExpansion, { minKeep: Math.min(rows, 10), threshold: 1.5 });
   } else if (_rfExpansion) {
-    // FIX v10.6 — default "Relevansi": urutkan berdasarkan skor relevansi
-    // KONSEPTUAL (kecocokan lintas istilah/bahasa hasil ekspansi), dengan
-    // jumlah sitasi sebagai penentu kedua. Jika ekspansi tidak aktif/gagal,
-    // urutan hasil tetap seperti perilaku lama (tidak diubah).
     filtered.sort((a, b) => {
       const sa = scoreConceptualRelevance_(a, _rfExpansion);
       const sb = scoreConceptualRelevance_(b, _rfExpansion);
@@ -14024,6 +14260,82 @@ function setParaIntensity(level) {
     pip.classList.toggle('active', l <= level);
   });
 }
+// ════════════════════════════════════════════════════════════════════════════
+// UNGGAH & TEMPEL NASKAH SUMBER untuk Paraphraser/Kondensasi (FITUR v11.0)
+// Membaca naskah dari file (.txt/.md/.csv/.json/.html natif; .docx via mammoth;
+// .pdf via pdf.js — parser dimuat lazy saat dibutuhkan) ATAU tempel/seret-lepas,
+// lalu memuat teks LENGKAP ke area input agar sistem memproses kondensasi secara
+// utuh & presisi. Non-blocking & aman: gagal baca satu file tidak menghentikan
+// yang lain, selalu memberi status jelas.
+// ════════════════════════════════════════════════════════════════════════════
+
+async function handleParaSourceFiles(input) {
+  var files = Array.prototype.slice.call(input.files || []);
+  if (!files.length) return;
+  var statusEl = document.getElementById('paraSourceStatus');
+  var ta = document.getElementById('paraInput');
+  if (!ta) return;
+
+  var loaded = [], failed = [], totalChars = 0;
+  for (var i = 0; i < files.length; i++) {
+    var f = files[i];
+    var ext = (f.name.split('.').pop() || '').toLowerCase();
+    if (statusEl) statusEl.textContent = '⏳ Membaca "' + f.name + '"' + (ext === 'pdf' || ext === 'docx' ? ' (memuat pembaca ' + ext.toUpperCase() + '…)' : '') + '…';
+    try {
+      var txt = '';
+      if (['txt', 'md', 'markdown', 'csv', 'json', 'html', 'htm'].indexOf(ext) >= 0) txt = await _readTextFile(f);
+      else if (ext === 'docx') txt = await _readDocxFile(f);
+      else if (ext === 'pdf') txt = await _readPdfFile(f);
+      else txt = await _readTextFile(f);
+      if (ext === 'html' || ext === 'htm') txt = txt.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ');
+      txt = String(txt || '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+      if (txt) { loaded.push({ name: f.name, text: txt, chars: txt.length }); totalChars += txt.length; }
+      else failed.push(f.name + ' (kosong)');
+    } catch (e) {
+      failed.push(f.name + ' (' + (e && e.message ? e.message : 'gagal') + ')');
+    }
+  }
+
+  if (loaded.length) {
+    // Gabung ke isi textarea (pertahankan teks yang sudah ada, tambahkan pemisah).
+    var existing = ta.value.trim();
+    var incoming = loaded.map(function (x) { return x.text; }).join('\n\n');
+    ta.value = existing ? (existing + '\n\n' + incoming) : incoming;
+    updateParaCounter(ta);
+  }
+
+  if (statusEl) {
+    var msg = [];
+    if (loaded.length) msg.push('✅ ' + loaded.length + ' file dimuat (' + totalChars.toLocaleString('id-ID') + ' karakter): ' + loaded.map(function (x) { return x.name; }).join(', '));
+    if (failed.length) msg.push('⚠️ gagal: ' + failed.join('; ') + ' — silakan tempel teksnya langsung.');
+    statusEl.innerHTML = msg.join('<br>');
+  }
+  if (loaded.length) {
+    var wc = countWords(ta.value);
+    toast('📎 Naskah dimuat: ' + wc.toLocaleString('id-ID') + ' kata siap diproses.', 4000);
+  } else if (failed.length) {
+    toast('Tidak ada file yang berhasil dibaca. Coba tempel teksnya langsung.', 5000);
+  }
+  input.value = '';
+}
+
+// ── Seret-lepas (drag & drop) file ke area teks ──
+function _paraDragOver(e) {
+  if (e && e.dataTransfer && e.dataTransfer.types && Array.prototype.indexOf.call(e.dataTransfer.types, 'Files') >= 0) {
+    e.preventDefault();
+    if (e.currentTarget && e.currentTarget.style) e.currentTarget.style.outline = '2px dashed #818cf8';
+  }
+}
+function _paraDragLeave(e) {
+  if (e && e.currentTarget && e.currentTarget.style) e.currentTarget.style.outline = '';
+}
+function _paraDrop(e) {
+  if (!e || !e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+  e.preventDefault();
+  if (e.currentTarget && e.currentTarget.style) e.currentTarget.style.outline = '';
+  handleParaSourceFiles({ files: e.dataTransfer.files, value: '' });
+}
+
 function updateParaCounter(ta) {
   var wc = ta.value.trim() ? ta.value.trim().split(/\s+/).length : 0;
   var counter = document.getElementById('paraInputCounter');
@@ -14057,6 +14369,8 @@ function updateParaCounter(ta) {
 function clearParaphrase() {
   document.getElementById('paraInput').value = '';
   document.getElementById('paraInputCounter').textContent = '0 kata';
+  var _pss = document.getElementById('paraSourceStatus'); if (_pss) _pss.innerHTML = '';
+  var _psf = document.getElementById('paraSourceFiles'); if (_psf) _psf.value = '';
   document.getElementById('paraProgressCard').style.display = 'none';
   // Reset result panel to empty state (don't hide — always visible)
   window._paraLastResult = null;
@@ -14724,13 +15038,46 @@ async function doParaphrase() {
       }
 
       // Transparansi target untuk mode condense (semua bab/subbab tetap lengkap).
-      if (mode === 'condense') {
+      if (mode === 'condense' && _condenseTargetWords > 0) {
         var _achievedWords = countWords(_paraRaw);
-        var _achievedPct   = _condenseTargetWords > 0 ? Math.round(_achievedWords / _condenseTargetWords * 100) : 100;
+
+        // FITUR v11.0 — REKONSILIASI PANJANG: bila hasil OVERSHOOT signifikan
+        // (>128% target) — akibat lantai-keutuhan memulihkan sebagian paragraf —
+        // rapatkan SEKALI lagi secara proporsional agar presisi ke target, tanpa
+        // membongkar struktur/sitasi. Aman & bergerbang: hasil rekonsiliasi hanya
+        // dipakai bila BENAR-BENAR lebih dekat ke target DAN tetap substansial
+        // (≥60% target); jika tidak, hasil semula dipertahankan (nol regresi).
+        if (_achievedWords > _condenseTargetWords * 1.28) {
+          var _recRatio = Math.min(0.95, Math.max(0.15, _condenseTargetWords / _achievedWords));
+          setProgTitle('🗜️ Menyelaraskan panjang ke target...',
+            'Rekonsiliasi proporsional ' + _achievedWords.toLocaleString('id-ID') + ' → ~' + _condenseTargetWords.toLocaleString('id-ID') + ' kata');
+          try {
+            var _recRes = await runStructuredParaTransform(_paraRaw, {
+              mode: 'condense', model: _paraEffModel, temperature: 0.3,
+              lang: lang, langName: langName, effRatio: _recRatio, enforceLength: true,
+              refNote: '', modeVerb: CORRESP_MODE_VERB.condense
+            }, {
+              onBlock: function (done, total) {
+                setProgTitle('🗜️ Rekonsiliasi panjang — bagian ' + done + '/' + total + '...', 'Menjaga struktur & sitasi tetap utuh');
+              }
+            });
+            var _recWords = _recRes && _recRes.content ? countWords(_recRes.content) : 0;
+            if (_recRes && _recRes.content && _recWords >= _condenseTargetWords * 0.6 &&
+                Math.abs(_recWords - _condenseTargetWords) < Math.abs(_achievedWords - _condenseTargetWords)) {
+              _paraRaw = _recRes.content;
+              result = { success: true, content: _paraRaw };
+              _achievedWords = _recWords;
+            }
+          } catch (_rec) { console.warn('[condense reconcile] dilewati (non-fatal):', _rec && _rec.message); }
+        }
+
+        var _achievedPct = Math.round(_achievedWords / _condenseTargetWords * 100);
         if (_achievedPct < 80) {
           toast('ℹ️ Kondensasi mencapai ' + _achievedWords.toLocaleString('id-ID') + ' kata (' + _achievedPct +
             '% dari target ' + _condenseTargetWords.toLocaleString('id-ID') + ' kata). Seluruh BAB/subbab tetap lengkap & ' +
             'berurutan; naikkan target atau coba model lain bila ingin lebih panjang.', 6500);
+        } else if (_achievedPct <= 120) {
+          toast('✅ Kondensasi presisi: ' + _achievedWords.toLocaleString('id-ID') + ' kata (' + _achievedPct + '% dari target).', 4000);
         }
       }
     } else {
@@ -15307,12 +15654,20 @@ function confirmAddSuggestedRefs(id) {
 function removeRefFromBibliographySet(id, refIdx) {
   var s = bibliographySets.find(function(x) { return x.id === id; });
   if (!s) return;
-  var removed = s.refs[refIdx];
   s.refs.splice(refIdx, 1); s.updatedAt = new Date().toISOString();
   saveBibliographySets(); renderBibliographySets(); populateBiblioSetSelect();
-  // FIX v10.7 — otomatis carikan pengganti yang relevan untuk referensi
-  // yang baru dihapus, agar cakupan berkas tetap terjaga (non-blocking).
-  _autoReplaceRefInSet_(id, removed);
+  // FITUR v10.9 — HAPUS BERSIH (presisi): penghapusan TIDAK lagi otomatis
+  // mengganti, agar berkas bisa difilter dengan presisi. Untuk menambah kembali,
+  // pengguna memilih sendiri: "✍️ Tambah Manual" (kurasi presisi), "➕ via DOI",
+  // atau "🔎 Sarankan (Otomatis)" — ketiganya tersedia sebagai aksi alternatif.
+  toast('Referensi dihapus. Tambah pengganti via ✍️ Manual / ➕ DOI / 🔎 Sarankan bila perlu.', 4500);
+}
+
+// Ganti otomatis eksplisit (opsional) — dipakai bila pengguna memang menginginkan
+// sistem mencarikan satu pengganti relevan. Tetap tersedia via tombol Sarankan.
+function autoReplaceLastInSet(id) {
+  var s = bibliographySets.find(function(x) { return x.id === id; });
+  if (s) _autoReplaceRefInSet_(id, null);
 }
 
 async function _autoReplaceRefInSet_(id, removedRef) {
@@ -15371,6 +15726,92 @@ var _BIBLIO_STYLE_OPTIONS = [
   ['harvard', 'Harvard'], ['ieee', 'IEEE'], ['turabian', 'Turabian'], ['isnad', 'ISNAD']
 ];
 
+// ════════════════════════════════════════════════════════════════════════════
+// TAMBAH REFERENSI MANUAL ke Berkas Bibliografi Bernama (FITUR v10.9)
+// Aksi alternatif selain hapus & ganti-otomatis: pengguna mengisi sendiri
+// field referensi (penulis, judul, tahun, jurnal, dll.) untuk kurasi presisi —
+// mis. mengganti referensi yang dihapus dengan sumber yang benar-benar relevan
+// & valid pilihan pengguna. Duplikat disaring berdasarkan DOI/judul.
+// ════════════════════════════════════════════════════════════════════════════
+
+// Parse daftar penulis dari textarea: satu penulis per baris atau dipisah ';'.
+// Menerima "Belakang, Depan" atau "Depan Belakang".
+function _parseManualAuthors_(raw) {
+  if (!raw || !raw.trim()) return [];
+  var parts = raw.split(/[;\n]+/).map(function (s) { return s.trim(); }).filter(Boolean);
+  return parts.map(function (p) {
+    if (p.indexOf(',') !== -1) {
+      var seg = p.split(',');
+      var family = (seg[0] || '').trim();
+      var given = (seg.slice(1).join(',') || '').trim();
+      return { family: family, given: given, full: (given ? given + ' ' : '') + family };
+    }
+    var toks = p.split(/\s+/);
+    var fam = toks.length > 1 ? toks[toks.length - 1] : p;
+    var giv = toks.length > 1 ? toks.slice(0, -1).join(' ') : '';
+    return { family: fam, given: giv, full: p };
+  });
+}
+
+// Buka/tutup panel form entri manual untuk sebuah berkas.
+function addManualRefToBibliographySet(id) {
+  var panel = document.getElementById('biblioSetManualPanel_' + id);
+  if (!panel) return;
+  if (panel.style.display !== 'none' && panel.innerHTML.trim()) { panel.style.display = 'none'; panel.innerHTML = ''; return; }
+  panel.style.display = '';
+  var f = function (lbl, fid, ph, w) {
+    return '<div style="flex:' + (w || 1) + ';min-width:120px;"><label style="font-size:.68rem;color:var(--text3);display:block;margin-bottom:2px;">' + lbl + '</label>' +
+      '<input type="text" id="mref_' + fid + '_' + id + '" placeholder="' + (ph || '') + '" style="width:100%;font-size:.78rem;padding:5px 7px;"></div>';
+  };
+  panel.innerHTML =
+    '<div style="font-size:.78rem;color:var(--text2);margin-bottom:8px;font-weight:600;">✍️ Tambah referensi manual (kurasi presisi):</div>' +
+    '<div style="margin-bottom:6px;"><label style="font-size:.68rem;color:var(--text3);display:block;margin-bottom:2px;">Penulis — satu per baris atau pisah dengan “;” (format: <em>Belakang, Depan</em>)</label>' +
+    '<textarea id="mref_authors_' + id + '" rows="2" placeholder="Contoh:&#10;Zainuddin, Iskandar&#10;Auda, Jasser" style="width:100%;font-size:.78rem;padding:5px 7px;"></textarea></div>' +
+    '<div style="margin-bottom:6px;">' + f('Judul *', 'title', 'Judul artikel/buku', 3) + '</div>' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">' + f('Tahun *', 'year', '2024', 1) + f('Jurnal / Penerbit', 'journal', 'Nama jurnal atau penerbit', 3) + '</div>' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">' + f('Volume', 'volume', 'mis. 12', 1) + f('Issue/No.', 'issue', 'mis. 2', 1) + f('Halaman', 'pages', 'mis. 45-67', 1) + '</div>' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">' + f('DOI', 'doi', '10.xxxx/xxxx', 2) + f('URL', 'url', 'https://...', 2) + '</div>' +
+    '<div style="display:flex;gap:6px;">' +
+    '<button class="btn btn-sm btn-primary" onclick="submitManualRefToSet(\'' + id + '\')">➕ Tambahkan ke Berkas</button>' +
+    '<button class="btn btn-sm btn-secondary" onclick="cancelManualRef(\'' + id + '\')">Batal</button>' +
+    '<span style="font-size:.68rem;color:var(--text3);align-self:center;">* Judul & Tahun wajib diisi.</span>' +
+    '</div>';
+}
+
+function cancelManualRef(id) {
+  var panel = document.getElementById('biblioSetManualPanel_' + id);
+  if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
+}
+
+function submitManualRefToSet(id) {
+  var s = bibliographySets.find(function (x) { return x.id === id; });
+  if (!s) return;
+  var g = function (fid) { var el = document.getElementById('mref_' + fid + '_' + id); return el ? el.value.trim() : ''; };
+  var title = g('title'), year = g('year');
+  if (!title) { toast('Judul wajib diisi.'); return; }
+  if (!year || !/^\d{3,4}$/.test(year)) { toast('Tahun wajib diisi (angka, mis. 2024).'); return; }
+
+  var ref = {
+    doi: g('doi'), title: title,
+    authors: _parseManualAuthors_(g('authors')),
+    journal: g('journal'), year: year, volume: g('volume'), issue: g('issue'),
+    pages: g('pages'), publisher: g('journal'), url: g('url'),
+    cited_by: 0, source: 'Manual', _manual: true
+  };
+  var key = _refIdentityKey_(ref);
+  if (key && s.refs.some(function (r) { return _refIdentityKey_(r) === key; })) {
+    toast('Referensi serupa sudah ada di berkas ini (duplikat disaring).');
+    return;
+  }
+  s.refs.push(ref);
+  s.updatedAt = new Date().toISOString();
+  saveBibliographySets();
+  cancelManualRef(id);
+  renderBibliographySets();
+  try { populateBiblioSetSelect(); } catch (_e) {}
+  toast('✍️ Referensi manual ditambahkan ke berkas "' + s.name + '".', 4000);
+}
+
 function renderBibliographySets() {
   var el = document.getElementById('biblioSetsArea');
   if (!el) return;
@@ -15399,13 +15840,15 @@ function renderBibliographySets() {
       '<div><strong>📄 ' + escHtml(s.name) + '</strong> <span style="color:var(--text3);font-size:.75rem;">(' + s.refs.length + ' referensi · abjad · diperbarui ' + new Date(s.updatedAt).toLocaleDateString('id-ID') + ')</span></div>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
       '<button class="btn btn-sm btn-secondary" onclick="loadBibliographySetIntoActive(\'' + s.id + '\')">📥 Muat ke Aktif</button>' +
-      '<button class="btn btn-sm btn-secondary" onclick="suggestRefsForSet(\'' + s.id + '\')">🔎 Sarankan Referensi Relevan</button>' +
-      '<button class="btn btn-sm btn-secondary" onclick="addRefToBibliographySetByDOI(\'' + s.id + '\')">➕ Tambah DOI Manual</button>' +
+      '<button class="btn btn-sm btn-secondary" onclick="suggestRefsForSet(\'' + s.id + '\')">🔎 Sarankan (Otomatis)</button>' +
+      '<button class="btn btn-sm btn-secondary" onclick="addRefToBibliographySetByDOI(\'' + s.id + '\')">➕ Tambah via DOI</button>' +
+      '<button class="btn btn-sm btn-secondary" onclick="addManualRefToBibliographySet(\'' + s.id + '\')">✍️ Tambah Manual</button>' +
       '<button class="btn btn-sm btn-secondary" onclick="renameBibliographySet(\'' + s.id + '\')">✏️ Ubah Nama</button>' +
       '<button class="btn btn-sm btn-secondary" onclick="deleteBibliographySet(\'' + s.id + '\')">🗑️ Hapus</button>' +
       '</div></div>' +
       '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;">' + styleTabs + '</div>' +
       '<div id="biblioSetStatus_' + s.id + '" style="font-size:.75rem;color:var(--accent);margin-top:6px;min-height:1em;"></div>' +
+      '<div id="biblioSetManualPanel_' + s.id + '" style="display:none;margin-top:8px;padding:10px;border:1px dashed var(--accent-border);border-radius:6px;background:var(--bg1);"></div>' +
       '<div id="biblioSetSuggestPanel_' + s.id + '" style="display:none;margin-top:8px;padding:8px;border:1px dashed var(--border);border-radius:6px;background:var(--bg1);"></div>' +
       '<div style="margin-top:8px;max-height:220px;overflow-y:auto;">' + (refRows || '<p style="color:var(--text3);font-size:.78rem;">Kosong.</p>') + '</div>' +
       '</div>';
