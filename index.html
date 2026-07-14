@@ -9839,6 +9839,11 @@ var CONDENSE_RECONCILE_MAX_WORDS = 3000; // rekonsiliasi hanya utk input ≤ ini
 // pendek dari ambang ini diperlakukan sebagai "uraian singkat" dan DIPERTAHANKAN
 // verbatim (tidak dipadatkan), sehingga hanya prosa panjang yang dikondensasi.
 var CONDENSE_MIN_PROSE_WORDS = 50;
+// FIX v11.4 — pengaman anti "verbatim-copy": blok front-matter (abstrak/kata
+// kunci) hanya dipertahankan verbatim bila isinya WAJAR-PENDEK. Bila isinya
+// besar, berarti heading section tak terdeteksi & body ter-salah-atribusi ke
+// blok front-matter → jangan dipertahankan (harus tetap dikondensasi).
+var CONDENSE_FRONTMATTER_MAX_WORDS = 350;
 // FIX v17 — Ambang kata di mana teks TANPA heading pun tetap dirutekan ke
 // mesin terstruktur (section-aware) agar dokumen panjang tidak terpotong pada
 // satu kali panggilan. Teks pendek tanpa heading tetap memakai jalur 1x panggilan
@@ -10068,7 +10073,15 @@ var CONDENSE_HEADING_PATTERNS = [
   { level: 1, re: /^(CHAPTER)\s+\d+\b/i },
   { level: 1, re: /^(ABSTRAK|ABSTRACT|INTISARI|RINGKASAN\s+EKSEKUTIF|KATA\s+KUNCI|KATA-KUNCI|KEYWORDS?|DAFTAR\s+ISI|DAFTAR\s+PUSTAKA|DAFTAR\s+TABEL|DAFTAR\s+GAMBAR|DAFTAR\s+SINGKATAN|GLOSARIUM|KATA\s+PENGANTAR|PRAKATA|UCAPAN\s+TERIMA\s+KASIH|LAMPIRAN|REFERENSI|REFERENCES|BIBLIOGRAPHY|APPENDIX)\b\s*:?\s*$/i },
   { level: 1, re: /^(LAMPIRAN|APPENDIX)\s*:\s*\S/i },
-  { level: 2, re: /^\d+\.\d+(?:\.\d+)?\s+\S/ }
+  // FIX v11.4 — section berhuruf besar Indonesia: "A. PENDAHULUAN" … "E. PENUTUP".
+  { level: 1, re: /^[A-Z]\.\s{1,}[A-Z][A-Za-z]/ },
+  // FIX v11.4 — subbab bernomor: "1. Judul Subbab", "12. Judul".
+  { level: 2, re: /^\d{1,2}\.\s+[A-Z][A-Za-z]/ },
+  { level: 2, re: /^\d+\.\d+(?:\.\d+)?\s+\S/ },
+  // FIX v11.4 — heading section standalone (tanpa penomoran).
+  { level: 2, re: /^(Kesimpulan|Simpulan|Ringkasan|Rekomendasi|Saran|Penutup|Pendahuluan|Latar\s+Belakang|Rumusan\s+Masalah|Tujuan\s+Penelitian|Manfaat\s+Penelitian|Tinjauan\s+Pustaka|Kerangka\s+(?:Teori|Teoretis|Konseptual)|Metode\s+Penelitian|Hasil\s+(?:Penelitian|dan\s+Pembahasan)|Pembahasan|Temuan|Diskusi|Implikasi(?:\s+Penelitian)?)\s*:?\s*$/i },
+  // FIX v11.4 — sub-subbab berhuruf kecil: "a. Judul", "b. Judul".
+  { level: 3, re: /^[a-z]\.\s+[A-Z][A-Za-z]/ }
 ];
 
 // Deteksi apakah satu baris teks merupakan heading struktural (BAB/subbab).
@@ -10186,6 +10199,18 @@ function _isNoTransformHeading(h, condensePreserve) {
   var t = (h || '').trim();
   if (_STRUCT_NOTRANSFORM_RE.test(t)) return true;
   if (condensePreserve && _STRUCT_CONDENSE_PRESERVE_RE.test(t)) return true;
+  return false;
+}
+// FIX v11.4 — keputusan preservasi SADAR-ISI: bibliografi/lampiran selalu
+// verbatim (ukuran berapa pun). Front-matter (abstrak/kata kunci) hanya verbatim
+// bila isinya wajar-pendek; body besar = mis-atribusi (heading tak terdeteksi) →
+// tetap dikondensasi agar tak terjadi salinan-verbatim seluruh naskah.
+function _shouldPreserveBlock(heading, body, condensePreserve) {
+  var t = (heading || '').trim();
+  if (_STRUCT_NOTRANSFORM_RE.test(t)) return true;
+  if (condensePreserve && _STRUCT_CONDENSE_PRESERVE_RE.test(t)) {
+    return countWords(body || '') <= CONDENSE_FRONTMATTER_MAX_WORDS;
+  }
   return false;
 }
 
@@ -10352,6 +10377,12 @@ async function _condenseParagraphBatch(units, unitIdxs, effRatio, opts) {
       var src = units[unitIdxs[k]];
       var got = map[k + 1];
       if (got) {
+        // FIX v11.5 — ANTI-KEBOCORAN: buang sisa penanda ⟦…⟧ & baris meta
+        // "(NN kata → target …)" yang mungkin ikut tersalin model, di mana pun
+        // posisinya, sebelum pemeriksaan lantai/kalimat.
+        got = got.replace(/⟦[^⟧]*⟧/g, ' ')
+                 .replace(/\([^)]*kata\s*(?:→|-?>)[^)]*\)/gi, ' ')
+                 .replace(/[ \t]{2,}/g, ' ').trim();
         got = trimToLastCompleteSentence(got);
         // Lantai keutuhan: paragraf yang terlalu pendek dibanding target
         // (indikasi runtuh/undershoot) DIPULIHKAN ke asli. Untuk condense,
@@ -10405,6 +10436,52 @@ async function _condenseParagraphBatch(units, unitIdxs, effRatio, opts) {
 // PARAGRAF berbasis korespondensi 1:1 (FIX v18). Menjamin: semua heading &
 // section hadir, berurutan, tak terpotong; tiap paragraf hadir & proporsional;
 // paragraf yang gagal ditransform dipertahankan ASLI (tak pernah hilang konten).
+
+// ════════════════════════════════════════════════════════════════════════════
+// ITALIC TRANSLITERASI (FITUR v11.4) — istilah asing/transliterasi Arab dimiringkan
+// sesuai kaidah akademik (istilah dimiringkan; NAMA DIRI seperti Al-Shatibi/Auda
+// TIDAK). Membungkus istilah dgn *...* (Markdown) → diekspor sbg italic di DOCX/HTML.
+// Aman: melewati heading, baris URL/DOI/referensi, dan bagian yang sudah italic.
+// ════════════════════════════════════════════════════════════════════════════
+var _TRANSLIT_AP = "['\\u2018\\u2019\\u02BC\\u02BF\\u02BE\\u02B9\\u0027\\u2032\\u00B4]";
+var _TRANSLIT_TERM_RE = new RegExp(
+  '\\b(' +
+  'maq[a\\u0101][s\\u1E63]h?id(?:\\s+al-?[s\\u0161]y?ar[i\\u012B]' + _TRANSLIT_AP + '?[a\\u0101]h)?' +
+  '|maqashid(?:\\s+al-?syar[i\\u012B]' + _TRANSLIT_AP + '?ah)?' +
+  '|(?:al-)?[s\\u0161]y?ar[i\\u012B]' + _TRANSLIT_AP + '?[a\\u0101]h' +
+  '|ma[s\\u1E63]la[h\\u1E25]ah(?:\\s+' + _TRANSLIT_AP + '?[a\\u0101]mmah)?' +
+  '|mafsadah|maslahah|mursalah' +
+  '|ijtih[a\\u0101]d|taql[i\\u012B]d|istinb[a\\u0101][t\\u1E6D]' +
+  '|u[s\\u1E63][u\\u016B][l\\u0142]?\\s+al-?fiqh|ushul\\s+fiqh' +
+  '|[h\\u1E25]if[d\\u1E93]z?(?:\\s+(?:al-|an-|ad-|a[nl]-)?[a-z\\u2018\\u2019\']+)?' +
+  '|sadd\\s+al-?[d\\u017E]h?ar[i\\u012B]' + _TRANSLIT_AP + '?[a\\u0101]h' +
+  '|(?:al-)?[d\\u1E0D]ar[u\\u016B]riyy[a\\u0101]t(?:\\s+al-?kham[s]?)?' +
+  '|(?:al-)?[h\\u1E25]ajiyy[a\\u0101]t|(?:al-)?ta[h\\u1E25]siniyy[a\\u0101]t' +
+  '|(?:al-)?kulliyy[a\\u0101]t(?:\\s+al-?kham[s]?)?' +
+  '|[d\\u017E]har[i\\u012B]' + _TRANSLIT_AP + '?ah' +
+  '|ushul\\s+fiqh|fiqh|maq[a\\u0101][s\\u1E63]id[i\\u012B]?' +
+  ')\\b',
+  'gi'
+);
+function italicizeTransliteration(text) {
+  if (!text || typeof text !== 'string') return text;
+  var lines = text.split('\n');
+  for (var i = 0; i < lines.length; i++) {
+    var ln = lines[i];
+    if (/^\s{0,3}#{1,6}\s/.test(ln)) continue;                 // heading
+    if (/^\s{0,3}>/.test(ln)) continue;                         // blockquote
+    if (/https?:\/\/|doi\.org|www\.|ISBN|ISSN/i.test(ln)) continue; // referensi/URL
+    var segs = ln.split(/(\*[^*]+\*|_[^_]+_)/);                 // lindungi yg sudah italic
+    for (var s = 0; s < segs.length; s++) {
+      var c0 = segs[s].charAt(0);
+      if (c0 === '*' || c0 === '_') continue;
+      segs[s] = segs[s].replace(_TRANSLIT_TERM_RE, function (m) { return '*' + m + '*'; });
+    }
+    lines[i] = segs.join('');
+  }
+  return lines.join('\n');
+}
+
 async function runStructuredParaTransform(text, opts, hooks) {
   hooks = hooks || {};
   var mode = opts.mode, model = opts.model, temperature = opts.temperature;
@@ -10426,7 +10503,7 @@ async function runStructuredParaTransform(text, opts, hooks) {
   var plan = [];
   for (var pi = 0; pi < blocks.length; pi++) {
     var pb = blocks[pi], pbody = (pb.body || '').trim();
-    if (!pbody || _isNoTransformHeading(pb.heading, _condensePreserve) || countWords(pbody) < minProse) { plan.push(null); continue; }
+    if (!pbody || _shouldPreserveBlock(pb.heading, pbody, _condensePreserve) || countWords(pbody) < minProse) { plan.push(null); continue; }
     var pu = _splitBodyIntoParagraphUnits(pbody, CORRESP_MAX_UNIT_WORDS);
     plan.push({ units: pu.units, groups: pu.groups, batches: _batchParagraphUnits(pu.units, CORRESP_BATCH_WORDS) });
   }
@@ -10480,7 +10557,16 @@ async function runStructuredParaTransform(text, opts, hooks) {
     var cHeadingMd = _headingToMarkdown(cblk.level, cblk.heading);
     var cbody = (cblk.body || '').trim();
     if (!cbody) { if (cHeadingMd) parts.push(cHeadingMd); continue; }
-    if (_isNoTransformHeading(cblk.heading, _condensePreserve)) { parts.push((cHeadingMd ? cHeadingMd + '\n\n' : '') + cbody); continue; }
+    if (_shouldPreserveBlock(cblk.heading, cbody, _condensePreserve)) {
+      // FIX v11.5 — konsistensi transliterasi: miringkan istilah juga pada
+      // front-matter yang dipertahankan (abstrak/kata kunci), TAPI bukan pada
+      // bibliografi/lampiran (_STRUCT_NOTRANSFORM_RE) agar format rujukan utuh.
+      var _cbodyOut = cbody;
+      if (opts.italicTranslit !== false && !_STRUCT_NOTRANSFORM_RE.test((cblk.heading || '').trim())) {
+        try { _cbodyOut = italicizeTransliteration(cbody); } catch (_it2) {}
+      }
+      parts.push((cHeadingMd ? cHeadingMd + '\n\n' : '') + _cbodyOut); continue;
+    }
     if (countWords(cbody) < minProse) { parts.push((cHeadingMd ? cHeadingMd + '\n\n' : '') + cbody); continue; }
     var cw = work[ci];
     var cOut = cw.outUnits, cUnits = cw.units, cGroups = cw.groups;
@@ -10492,6 +10578,11 @@ async function runStructuredParaTransform(text, opts, hooks) {
     }
     if (cw.restored >= Math.ceil(cUnits.length * 0.5) && cUnits.length > 0) {
       failedBlocks.push(cblk.heading || ('blok ' + (ci + 1)));
+    }
+    // FITUR v11.4 — miringkan istilah transliterasi pada prosa yang ditransform
+    // (bukan blok verbatim), sesuai kaidah penulisan akademik.
+    if (opts.italicTranslit !== false) {
+      try { cBodyOut = italicizeTransliteration(cBodyOut); } catch (_it) {}
     }
     parts.push((cHeadingMd ? cHeadingMd + '\n\n' : '') + cBodyOut);
   }
