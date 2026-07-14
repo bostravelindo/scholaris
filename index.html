@@ -327,6 +327,7 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
 .progress-bar-outer { height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; margin-bottom: 16px; overflow:hidden; }
 .progress-bar-fill { height: 100%; background: linear-gradient(90deg, #8b4513, #f5deb3, #8b4513); background-size: 200% 100%; border-radius: 3px; transition: width .4s ease; animation: shimmer 2s linear infinite; }
 @keyframes shimmer { 0%{ background-position:200% 0 } 100%{ background-position:-200% 0 } }
+@keyframes paraShimmer { 0%{ transform:translateX(-100%); } 60%,100%{ transform:translateX(100%); } }
 .progress-steps { display: flex; flex-direction: column; gap: 8px; }
 .progress-step { display: flex; align-items: center; gap: 10px; font-size: .82rem; color: #8a8279; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
 .progress-step.done { color: #a8d5a2; }
@@ -4187,13 +4188,20 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
         <!-- ── Progress Panel ────────────────────────────────────── -->
         <div class="card" id="paraProgressCard" style="display:none;">
           <div class="para-progress-panel" style="display:block;">
-            <div style="font-family:var(--font-display);font-size:.95rem;color:#f5deb3;margin-bottom:4px;" id="paraProgTitle">
-              🔬 Menganalisis teks...
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+              <div style="font-family:var(--font-display);font-size:1rem;color:#f5deb3;flex:1;line-height:1.3;" id="paraProgTitle">
+                🔬 Menganalisis teks...
+              </div>
+              <div id="paraProgPct" style="font-family:var(--font-display);font-size:1.2rem;font-weight:800;color:#0b1020;background:linear-gradient(90deg,#fbbf24,#f59e0b);padding:3px 14px;border-radius:20px;min-width:58px;text-align:center;box-shadow:0 2px 10px rgba(251,191,36,.45);letter-spacing:.5px;">0%</div>
             </div>
-            <div style="font-size:.75rem;color:var(--text3);margin-bottom:16px;" id="paraProgSub">
+            <div style="font-size:.78rem;color:var(--text3);margin-bottom:14px;" id="paraProgSub">
               Mempersiapkan strategi transformasi linguistik
             </div>
-            <div class="para-progress-steps" id="paraProgSteps"></div>
+            <div id="paraProgBarWrap" style="height:18px;background:#131a28;border:1.5px solid rgba(251,191,36,.4);border-radius:11px;overflow:hidden;position:relative;box-shadow:inset 0 2px 6px rgba(0,0,0,.55);">
+              <div id="paraProgBar" style="height:100%;width:0%;background:linear-gradient(90deg,#d97706 0%,#f59e0b 45%,#fcd34d 100%);border-radius:11px;transition:width .55s cubic-bezier(.4,0,.2,1);box-shadow:0 0 14px rgba(251,191,36,.65);"></div>
+              <div id="paraProgShimmer" style="position:absolute;top:0;left:0;height:100%;width:100%;background:linear-gradient(100deg,transparent 20%,rgba(255,255,255,.28) 50%,transparent 80%);transform:translateX(-100%);animation:paraShimmer 1.7s ease-in-out infinite;pointer-events:none;"></div>
+            </div>
+            <div class="para-progress-steps" id="paraProgSteps" style="margin-top:14px;"></div>
           </div>
         </div>
 
@@ -9834,7 +9842,7 @@ var CONDENSE_INTER_CHUNK_DELAY_MS = 700;
 // hanya untuk dokumen kecil (menghindari menjalankan ulang seluruh transform).
 var CONDENSE_CONCURRENCY = 3;            // jumlah panggilan batch paralel
 var CONDENSE_BATCH_TIMEOUT_MS = 180000;  // 3 mnt per batch (batch ~700 kata)
-var CONDENSE_RECONCILE_MAX_WORDS = 3000; // rekonsiliasi hanya utk input ≤ ini
+var CONDENSE_RECONCILE_MAX_WORDS = 15000; // rekonsiliasi hingga naskah besar (v11.6)
 // FITUR v11.3 — kondensasi fokus PROSA PANJANG: section/blok dengan isi lebih
 // pendek dari ambang ini diperlakukan sebagai "uraian singkat" dan DIPERTAHANKAN
 // verbatim (tidak dipadatkan), sehingga hanya prosa panjang yang dikondensasi.
@@ -10330,6 +10338,19 @@ function _parseMarkedParagraphs(output) {
   return map;
 }
 
+// FIX v11.6 — penghitung sitasi (author-year, numerik [n], superscript) untuk
+// menjaga INTEGRITAS akademik saat kondensasi agresif: paragraf hasil hanya
+// dipulihkan ke asli bila kehilangan sitasi / tak utuh — BUKAN sekadar karena
+// lebih pendek. Ini membuat target % (30/50/70) benar-benar tercapai.
+function _countCitations(t) {
+  if (!t) return 0;
+  var c = 0, m;
+  m = t.match(/\([^)]*\b(?:1[5-9]|20)\d{2}[a-z]?\b[^)]*\)/g); if (m) c += m.length;   // (Penulis, Tahun)
+  m = t.match(/\[\d{1,3}\]/g); if (m) c += m.length;                                    // [n]
+  m = t.match(/[\u00B9\u00B2\u00B3\u2070-\u2079]+/g); if (m) c += m.length;             // superscript
+  return c;
+}
+
 // Transform SATU batch paragraf dengan korespondensi 1:1 (penanda ⟦P n⟧).
 // Return { out:[teks paragraf terproses, urutan == unitIdxs], restored, present }.
 // Pengaman LANTAI: paragraf hilang / runtuh di bawah ambang → dipulihkan ASLI.
@@ -10384,15 +10405,19 @@ async function _condenseParagraphBatch(units, unitIdxs, effRatio, opts) {
                  .replace(/\([^)]*kata\s*(?:→|-?>)[^)]*\)/gi, ' ')
                  .replace(/[ \t]{2,}/g, ' ').trim();
         got = trimToLastCompleteSentence(got);
-        // Lantai keutuhan: paragraf yang terlalu pendek dibanding target
-        // (indikasi runtuh/undershoot) DIPULIHKAN ke asli. Untuk condense,
-        // lantai = 72% dari target proporsional → menjaga tiap paragraf tetap
-        // ≥ ~½ panjang asli, sehingga rincian/uraian tak terbuang dan section
-        // tetap proporsional dari awal hingga akhir (integritas terjaga).
-        var floor = enforceLength
-          ? Math.max(12, Math.round(countWords(src) * effRatio * 0.72))
-          : Math.max(8,  Math.round(countWords(src) * 0.5));
-        if (countWords(got) >= floor) { out.push(got); present++; continue; }
+        // FIX v11.6 — RASIONALISASI PROPORSIONAL: terima kondensasi agresif agar
+        // target % benar-benar tercapai. Paragraf hasil dipulihkan ke ASLI HANYA
+        // bila benar-benar rusak: (a) di bawah lantai-runtuh MUTLAK (jauh lebih
+        // rendah dari target), (b) kehilangan >40% sitasi sumber, atau (c) tak
+        // berakhir dengan kalimat lengkap. Selain itu, hasil padat DITERIMA.
+        var _gw = countWords(got);
+        var _srcCites = _countCitations(src), _gotCites = _countCitations(got);
+        var _citesOK = _srcCites === 0 ? true : (_gotCites >= Math.ceil(_srcCites * 0.6));
+        var _endsWell = /[.!?)\]\u201d\u2019"'\u00BB]\s*$/.test(got) || _gw >= 8;
+        var _hardMin = enforceLength
+          ? Math.max(6, Math.round(countWords(src) * effRatio * 0.40))   // lantai-runtuh mutlak
+          : Math.max(8, Math.round(countWords(src) * 0.5));
+        if (_gw >= _hardMin && _citesOK && _endsWell) { out.push(got); present++; continue; }
       }
       out.push(src); restored++;        // pulihkan ASLI — TIDAK PERNAH kehilangan konten
     }
@@ -15034,6 +15059,7 @@ async function doParaphrase() {
   _greyBtn('btnParaPDF'); _greyBtn('btnParaIntegrity');
   _greyBtn('paraStatBtn'); _greyBtn('paraMethodBtn');
   document.getElementById('paraProgressCard').style.display = '';
+  (function(){ var _b=document.getElementById('paraProgBar'), _l=document.getElementById('paraProgPct'); if(_b)_b.style.width='0%'; if(_l)_l.textContent='0%'; })();
 
   var PROG_STEPS = [
     {icon:'🔍',label:'Analisis\nTeks'},{icon:'📚',label:'Harvest\nReferensi'},
@@ -15059,13 +15085,21 @@ async function doParaphrase() {
     if (te) te.textContent = t;
     if (se && sub) se.textContent = sub;
   };
+  // FIX v11.6 — progress bar kondensasi kontras & dinamis (0–100%).
+  var setProgBar = function(pct) {
+    pct = Math.max(0, Math.min(100, Math.round(pct)));
+    var bar = document.getElementById('paraProgBar');
+    var lbl = document.getElementById('paraProgPct');
+    if (bar) bar.style.width = pct + '%';
+    if (lbl) lbl.textContent = pct + '%';
+  };
 
   setLoading(true);
   try {
-    setProgStep(0,'active');
+    setProgStep(0,'active'); setProgBar(6);
     setProgTitle('🔍 Menganalisis struktur teks...','Menghitung kompleksitas & karakteristik linguistik');
     await new Promise(function(r){ setTimeout(r,350); });
-    setProgStep(0,'done');
+    setProgStep(0,'done'); setProgBar(14);
 
     setProgStep(1,'active');
     setProgTitle('📚 Mengambil referensi terverifikasi...','Hexa-Source: CrossRef + DOAJ + OpenAlex + 🟠Scopus + Semantic Scholar');
@@ -15079,7 +15113,7 @@ async function doParaphrase() {
     // Baca citeStyle yang aktif — paraphraser harus ikuti gaya yang dipilih user
     var activeCiteStyle = (document.getElementById('citeStyle') && document.getElementById('citeStyle').value) || 'apa7';
     var paraRefNote = validatedRefPool.length > 0 ? '\n\n' + buildLockedRefContext_(validatedRefPool, activeCiteStyle, lang) : '';
-    setProgStep(1,'done');
+    setProgStep(1,'done'); setProgBar(22);
 
     setProgStep(2,'active');
     setProgTitle('🤖 Mentransformasi teks...',(modeNames[mode]||mode)+' — Intensitas '+intensity+'/5');
@@ -15154,6 +15188,7 @@ async function doParaphrase() {
         onBlock: function (done, total, label) {
           setProgTitle('🤖 ' + (modeNames[mode] || mode) + ' — bagian ' + done + '/' + total + '...',
             (label ? String(label).slice(0, 80) : '') + (total > 1 ? ' · struktur BAB/subbab dijaga utuh' : ''));
+          if (total > 0) setProgBar(22 + Math.round((done / total) * 60));
         }
       });
 
@@ -15181,6 +15216,7 @@ async function doParaphrase() {
         // sudah menjaga panjang. Untuk input ≤ ambang, rapatkan sekali bila overshoot.
         if (_achievedWords > _condenseTargetWords * 1.28 && _inputWC <= CONDENSE_RECONCILE_MAX_WORDS) {
           var _recRatio = Math.min(0.95, Math.max(0.15, _condenseTargetWords / _achievedWords));
+          setProgBar(86);
           setProgTitle('🗜️ Menyelaraskan panjang ke target...',
             'Rekonsiliasi proporsional ' + _achievedWords.toLocaleString('id-ID') + ' → ~' + _condenseTargetWords.toLocaleString('id-ID') + ' kata');
           try {
@@ -15239,7 +15275,7 @@ async function doParaphrase() {
       }
       _paraRaw = (result.content || '').trim();
     }
-    setProgStep(2,'done');
+    setProgStep(2,'done'); setProgBar(88);
 
     // ── Grok 4.20 Empirical Grounding — Paraphraser ──
     // Aktif untuk mode data-intensif; dilewati untuk humanize, simplify & condense
@@ -15250,7 +15286,7 @@ async function doParaphrase() {
     var _paraCite  = (document.getElementById('citeStyle') && document.getElementById('citeStyle').value) || 'apa7';
     var _paraGrounded = _paraRaw;
     if (_paraGroundModes.indexOf(mode) !== -1 && isGrokGroundActive()) {
-      setProgStep(3,'active');
+      setProgStep(3,'active'); setProgBar(93);
       setProgTitle('⚡ Grok 4.20 Empirical Grounding...','Memperkuat data empiris, statistik & fakta terkini');
       try {
         _paraGrounded = await grokGroundText(_paraRaw, _paraTitle, lang, _paraCite, 1);
@@ -15258,11 +15294,11 @@ async function doParaphrase() {
         console.warn('[Grok Paraphrase] error:', _pge.message);
         _paraGrounded = _paraRaw;
       }
-      setProgStep(3,'done');
+      setProgStep(3,'done'); setProgBar(96);
     }
 
     // Step 4: Compute statistics
-    setProgStep(4,'active');
+    setProgStep(4,'active'); setProgBar(97);
     setProgTitle('📊 Menghitung statistik linguistik...','Analisis TTR, Gunning Fog, variasi stilistika...');
     var resultText = _paraGrounded;
     window._paraLastResult = resultText;
@@ -15284,7 +15320,7 @@ async function doParaphrase() {
     })();
 
     await new Promise(function(r){ setTimeout(r,300); });
-    setProgStep(4,'done');
+    setProgStep(4,'done'); setProgBar(100);
 
     // ── Unlock action buttons & show result ────────────────────
     var _enableBtn = function(id) {
