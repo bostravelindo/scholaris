@@ -10747,14 +10747,66 @@ async function condenseDocumentRobust(text, targetWords, opts, hooks) {
     } catch (_e) { res = null; }
 
     if (!(res && res.success && res.content)) return { text: body, apiFailed: true };
-    var got = String(res.content)
+    var content = String(res.content).trim();
+
+    // FIX v12.3 — DETEKSI TRUNCATION + CONTINUATION: bila output model terpotong
+    // di tengah kalimat/kata (finish_reason='length') atau jauh di bawah target,
+    // lanjutkan/lengkapi hingga utuh — mencegah uraian subbab terputus.
+    var rounds = 0, MAX_R = 3;
+    while (rounds < MAX_R) {
+      var trunc;
+      try { trunc = detectTruncation(content, tgt); } catch (_dt) { trunc = { truncated: false }; }
+      if (!trunc.truncated) break;
+      rounds++;
+      if (/word-count-low/.test(trunc.reason || '')) {
+        // Model berhenti terlalu dini (rapi tapi pendek) → regenerasi lebih menyeluruh.
+        try {
+          var achieved = countWords(content);
+          var rp = userPrompt + '\n\n[WAJIB] Percobaan sebelumnya hanya ~' + achieved + ' kata — jauh di bawah target ' +
+            tgt + ' kata. Tulis ULANG dari awal, proses SETIAP bagian secara proporsional & menyeluruh hingga mendekati ' + tgt + ' kata.';
+          var rr = await _condenseCallWithRetry({
+            action: 'ai_write', model: model, system: system,
+            messages: [{ role: 'user', content: rp }], temperature: temperature, max_tokens: maxTok
+          }, 'Regenerasi (kata kurang)', CONDENSE_BATCH_TIMEOUT_MS);
+          if (rr && rr.success && rr.content && countWords(rr.content) > achieved) content = String(rr.content).trim();
+          else break;
+        } catch (_re) { break; }
+        continue;
+      }
+      // Cutoff di tengah kalimat/kata → continuation dari ekor teks.
+      content = (typeof trimTrailingPartialWord === 'function') ? trimTrailingPartialWord(content) : content;
+      try {
+        var tail = content.slice(-1200);
+        var cp = 'Ini lanjutan dari teks KONDENSASI akademis yang TERPOTONG. Lanjutkan PERSIS dari titik berhenti — ' +
+          'JANGAN mengulang, JANGAN menambah heading/pembatas. Teks berakhir di batas kata utuh; mulai sebagai KATA BARU.\n\n' +
+          '------ EKOR TEKS (konteks) ------\n' + tail + '\n------ LANJUTKAN DARI SINI ------\n\n' +
+          'Selesaikan hingga tuntas & koheren, akhiri dengan kalimat lengkap. Output HANYA lanjutannya.';
+        var cMaxTok = clampMaxTokens(model, estimateTokensFromWords(Math.max(300, Math.round(tgt * 0.5)), lang));
+        var cr = await _condenseCallWithRetry({
+          action: 'ai_write', model: model, system: system,
+          messages: [{ role: 'user', content: cp }], temperature: temperature, max_tokens: cMaxTok
+        }, 'Continuation', CONDENSE_BATCH_TIMEOUT_MS);
+        if (!(cr && cr.success && cr.content)) break;
+        var ct = (typeof stripOverlap === 'function') ? stripOverlap(tail, String(cr.content).trim()) : String(cr.content).trim();
+        if (!ct) break;
+        content = content + ' ' + ct;
+      } catch (_ce) { break; }
+    }
+    // Jaring pengaman: JANGAN PERNAH berakhir di tengah kalimat/kata — selalu
+    // pangkas fragmen ekor ke kalimat lengkap terakhir (fragmen mid-kata tak layak).
+    if (!/[.!?)\]\u201d\u2019"'\u00BB]\s*$/.test(content)) {
+      var _cut = content.replace(/[^.!?\u201d\u2019")\]]*$/, '').trim();
+      if (_cut && countWords(_cut) >= 8) content = _cut;
+    }
+
+    var got = content
       .replace(/⟦[^⟧]*⟧/g, ' ')
       .replace(/^\s*(?:berikut(?:\s+\w+)*|here is|ringkasan|versi\s+padat|hasil\s+kondensasi|naskah\s+padat|isi\s+padat)[^:\n]{0,40}:\s*/i, '')
       .replace(/^\s{0,3}#{1,6}\s.*(?:\n|$)/, '')   // buang baris heading bila model tetap menuliskannya
       .replace(/[ \t]{2,}/g, ' ').trim();
     var gw = countWords(got);
-    if (gw >= 10 && gw <= sw * 1.1) return { text: got, apiFailed: false };
-    if (gw > sw * 1.1) return { text: (gw <= sw * 1.25 ? got : body), apiFailed: false };
+    if (gw >= 10 && gw <= sw * 1.15) return { text: got, apiFailed: false };
+    if (gw > sw * 1.15) return { text: (gw <= sw * 1.3 ? got : body), apiFailed: false };
     return { text: body, apiFailed: true };   // kosong → anggap gagal, pertahankan asli
   }
 
