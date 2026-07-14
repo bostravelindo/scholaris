@@ -9835,6 +9835,10 @@ var CONDENSE_INTER_CHUNK_DELAY_MS = 700;
 var CONDENSE_CONCURRENCY = 3;            // jumlah panggilan batch paralel
 var CONDENSE_BATCH_TIMEOUT_MS = 180000;  // 3 mnt per batch (batch ~700 kata)
 var CONDENSE_RECONCILE_MAX_WORDS = 3000; // rekonsiliasi hanya utk input ≤ ini
+// FITUR v11.3 — kondensasi fokus PROSA PANJANG: section/blok dengan isi lebih
+// pendek dari ambang ini diperlakukan sebagai "uraian singkat" dan DIPERTAHANKAN
+// verbatim (tidak dipadatkan), sehingga hanya prosa panjang yang dikondensasi.
+var CONDENSE_MIN_PROSE_WORDS = 50;
 // FIX v17 — Ambang kata di mana teks TANPA heading pun tetap dirutekan ke
 // mesin terstruktur (section-aware) agar dokumen panjang tidak terpotong pada
 // satu kali panggilan. Teks pendek tanpa heading tetap memakai jalur 1x panggilan
@@ -10062,7 +10066,7 @@ async function _condenseGenerateComplete(userPrompt, targetWords, systemPrompt, 
 var CONDENSE_HEADING_PATTERNS = [
   { level: 1, re: /^BAB\s+[IVXLCDM]+\b/i },
   { level: 1, re: /^(CHAPTER)\s+\d+\b/i },
-  { level: 1, re: /^(ABSTRAK|ABSTRACT|DAFTAR\s+ISI|DAFTAR\s+PUSTAKA|KATA\s+PENGANTAR|PRAKATA|UCAPAN\s+TERIMA\s+KASIH|LAMPIRAN|REFERENSI|REFERENCES|BIBLIOGRAPHY|APPENDIX)\b\s*:?\s*$/i },
+  { level: 1, re: /^(ABSTRAK|ABSTRACT|INTISARI|RINGKASAN\s+EKSEKUTIF|KATA\s+KUNCI|KATA-KUNCI|KEYWORDS?|DAFTAR\s+ISI|DAFTAR\s+PUSTAKA|DAFTAR\s+TABEL|DAFTAR\s+GAMBAR|DAFTAR\s+SINGKATAN|GLOSARIUM|KATA\s+PENGANTAR|PRAKATA|UCAPAN\s+TERIMA\s+KASIH|LAMPIRAN|REFERENSI|REFERENCES|BIBLIOGRAPHY|APPENDIX)\b\s*:?\s*$/i },
   { level: 1, re: /^(LAMPIRAN|APPENDIX)\s*:\s*\S/i },
   { level: 2, re: /^\d+\.\d+(?:\.\d+)?\s+\S/ }
 ];
@@ -10170,10 +10174,20 @@ function splitCondenseSourceIntoChunks(text, numChunks) {
 //   humanize/elaborate/formalize/simplify) untuk input ber-heading / panjang.
 // ════════════════════════════════════════════════════════════════════
 
-// Heading yang isinya TIDAK BOLEH ditransformasi (dilewatkan verbatim) —
-// bibliografi & lampiran wajib utuh demi integritas referensi akademik.
-var _STRUCT_NOTRANSFORM_RE = /^(DAFTAR\s+PUSTAKA|REFERENSI|REFERENCES|BIBLIOGRAPHY|DAFTAR\s+ISI|LAMPIRAN|APPENDIX)\b/i;
-function _isNoTransformHeading(h) { return _STRUCT_NOTRANSFORM_RE.test((h || '').trim()); }
+// Heading yang isinya SELALU dipertahankan verbatim (semua mode) — bibliografi,
+// referensi, lampiran, daftar-daftar: wajib utuh demi integritas referensi.
+var _STRUCT_NOTRANSFORM_RE = /^(DAFTAR\s+PUSTAKA|REFERENSI|REFERENCES|BIBLIOGRAPHY|DAFTAR\s+ISI|DAFTAR\s+TABEL|DAFTAR\s+GAMBAR|DAFTAR\s+SINGKATAN|DAFTAR\s+LAMPIRAN|GLOSARIUM|LAMPIRAN|APPENDIX(?:ES)?)\b/i;
+// FITUR v11.3 — front-matter yang dipertahankan KHUSUS saat KONDENSASI: abstrak
+// (sudah ringkasan — memadatkan lagi merusak makna), kata kunci, dan pengantar
+// bukanlah "prosa panjang" sehingga tidak ikut dikondensasi. Untuk mode lain
+// (paraphrase/humanize/dll.) item ini tetap boleh ditransformasi (nol regresi).
+var _STRUCT_CONDENSE_PRESERVE_RE = /^(ABSTRAK|ABSTRACT|INTISARI|SARI\s+PATI|RINGKASAN\s+EKSEKUTIF|KATA\s+KUNCI|KATA-KUNCI|KEYWORDS?|KATA\s+PENGANTAR|PRAKATA|UCAPAN\s+TERIMA\s+KASIH)\b/i;
+function _isNoTransformHeading(h, condensePreserve) {
+  var t = (h || '').trim();
+  if (_STRUCT_NOTRANSFORM_RE.test(t)) return true;
+  if (condensePreserve && _STRUCT_CONDENSE_PRESERVE_RE.test(t)) return true;
+  return false;
+}
 
 // Parse teks sumber → daftar blok {level, heading, body} terurut.
 // level 0 = blok pembuka tanpa heading. Memakai _detectHeadingLine yang sama
@@ -10399,6 +10413,11 @@ async function runStructuredParaTransform(text, opts, hooks) {
   var enforceLength = !!opts.enforceLength;
   var refNote = opts.refNote || '';
   var modeVerb = opts.modeVerb || CORRESP_MODE_VERB[mode] || (enforceLength ? 'padatkan secara proporsional' : 'parafrasekan secara akademis');
+  // FITUR v11.3 — ambang "prosa panjang": blok dengan isi < minProse dipertahankan
+  // verbatim (uraian singkat/heading pendek). Default 18 (mode non-condense, nol
+  // regresi); condense memakai CONDENSE_MIN_PROSE_WORDS agar fokus ke prosa panjang.
+  var minProse = (typeof opts.minProseWords === 'number' && opts.minProseWords > 0) ? opts.minProseWords : 18;
+  var _condensePreserve = (mode === 'condense');  // pertahankan abstrak/kata-kunci/pengantar hanya saat kondensasi
 
   var blocks = parseStructuredBlocks(text);
   if (!blocks.length) blocks = [{ level: 0, heading: '', body: String(text || '').trim() }];
@@ -10407,7 +10426,7 @@ async function runStructuredParaTransform(text, opts, hooks) {
   var plan = [];
   for (var pi = 0; pi < blocks.length; pi++) {
     var pb = blocks[pi], pbody = (pb.body || '').trim();
-    if (!pbody || _isNoTransformHeading(pb.heading) || countWords(pbody) < 18) { plan.push(null); continue; }
+    if (!pbody || _isNoTransformHeading(pb.heading, _condensePreserve) || countWords(pbody) < minProse) { plan.push(null); continue; }
     var pu = _splitBodyIntoParagraphUnits(pbody, CORRESP_MAX_UNIT_WORDS);
     plan.push({ units: pu.units, groups: pu.groups, batches: _batchParagraphUnits(pu.units, CORRESP_BATCH_WORDS) });
   }
@@ -10461,8 +10480,8 @@ async function runStructuredParaTransform(text, opts, hooks) {
     var cHeadingMd = _headingToMarkdown(cblk.level, cblk.heading);
     var cbody = (cblk.body || '').trim();
     if (!cbody) { if (cHeadingMd) parts.push(cHeadingMd); continue; }
-    if (_isNoTransformHeading(cblk.heading)) { parts.push((cHeadingMd ? cHeadingMd + '\n\n' : '') + cbody); continue; }
-    if (countWords(cbody) < 18) { parts.push((cHeadingMd ? cHeadingMd + '\n\n' : '') + cbody); continue; }
+    if (_isNoTransformHeading(cblk.heading, _condensePreserve)) { parts.push((cHeadingMd ? cHeadingMd + '\n\n' : '') + cbody); continue; }
+    if (countWords(cbody) < minProse) { parts.push((cHeadingMd ? cHeadingMd + '\n\n' : '') + cbody); continue; }
     var cw = work[ci];
     var cOut = cw.outUnits, cUnits = cw.units, cGroups = cw.groups;
     for (var cu = 0; cu < cOut.length; cu++) if (cOut[cu] == null) cOut[cu] = cUnits[cu];
@@ -15034,7 +15053,10 @@ async function doParaphrase() {
       var _structOpts = {
         mode: mode, model: _paraEffModel, temperature: 0.3 + (intensity * 0.1),
         lang: lang, langName: langName, effRatio: _effRatio, enforceLength: _enforceLen,
-        refNote: paraRefNote || '', modeVerb: CORRESP_MODE_VERB[mode]
+        refNote: paraRefNote || '', modeVerb: CORRESP_MODE_VERB[mode],
+        // FITUR v11.3 — kondensasi fokus prosa panjang; abstrak/heading/uraian
+        // singkat/Daftar Pustaka dipertahankan (ambang lebih tinggi utk condense).
+        minProseWords: (mode === 'condense') ? CONDENSE_MIN_PROSE_WORDS : 18
       };
 
       var _structRes = await runStructuredParaTransform(text, _structOpts, {
@@ -15074,7 +15096,8 @@ async function doParaphrase() {
             var _recRes = await runStructuredParaTransform(_paraRaw, {
               mode: 'condense', model: _paraEffModel, temperature: 0.3,
               lang: lang, langName: langName, effRatio: _recRatio, enforceLength: true,
-              refNote: '', modeVerb: CORRESP_MODE_VERB.condense
+              refNote: '', modeVerb: CORRESP_MODE_VERB.condense,
+              minProseWords: CONDENSE_MIN_PROSE_WORDS
             }, {
               onBlock: function (done, total) {
                 setProgTitle('🗜️ Rekonsiliasi panjang — bagian ' + done + '/' + total + '...', 'Menjaga struktur & sitasi tetap utuh');
