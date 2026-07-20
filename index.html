@@ -1268,7 +1268,104 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
   .tb-user-chip{ padding:4px 7px 4px 4px; }
   .tb-user-menu{ width:290px; }
 }
-.member-badge-name{font-size:.8rem;color:#f5deb3;font-weight:600;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* ══ FIX v13 — ASISTEN AKADEMIK (widget mengambang) ══════════════════════ */
+.aa-launcher{
+  position:fixed; right:22px; bottom:22px; z-index:1400;
+  display:flex; align-items:center; gap:9px; padding:11px 17px 11px 13px;
+  background:linear-gradient(135deg,#8b4513,#c8a96a); color:#fff;
+  border-radius:999px; cursor:pointer; box-shadow:0 8px 26px rgba(139,69,19,.42);
+  font-family:var(--font-body); font-weight:700; font-size:.82rem;
+  transition:transform .18s, box-shadow .18s; border:1.5px solid rgba(245,222,179,.35);
+}
+.aa-launcher:hover{ transform:translateY(-2px) scale(1.02); box-shadow:0 12px 32px rgba(139,69,19,.52); }
+.aa-launcher-icon{ font-size:1.15rem; line-height:1; }
+.aa-launcher.hidden{ display:none; }
+@media (max-width:520px){ .aa-launcher-label{ display:none; } .aa-launcher{ padding:13px; } }
+
+.aa-widget{
+  position:fixed; right:22px; bottom:22px; z-index:1450;
+  width:390px; max-width:calc(100vw - 32px); height:560px; max-height:calc(100vh - 40px);
+  display:none; flex-direction:column; overflow:hidden;
+  background:var(--surface); border:1px solid var(--border); border-radius:16px;
+  box-shadow:0 22px 60px rgba(0,0,0,.5);
+  animation:aaIn .2s ease-out;
+}
+.aa-widget.open{ display:flex; }
+@keyframes aaIn{ from{ opacity:0; transform:translateY(14px) scale(.98); } to{ opacity:1; transform:translateY(0) scale(1); } }
+.aa-widget.fullscreen{
+  right:24px; bottom:24px; top:24px; left:24px;
+  width:auto; height:auto; max-width:none; max-height:none;
+}
+@media (max-width:600px){
+  .aa-widget{ right:10px; left:10px; bottom:10px; width:auto; height:78vh; }
+  .aa-widget.fullscreen{ right:0; left:0; top:0; bottom:0; border-radius:0; }
+}
+.aa-head{
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  padding:12px 14px; background:linear-gradient(135deg,rgba(139,69,19,.20),rgba(245,222,179,.05));
+  border-bottom:1px solid var(--border); flex-shrink:0;
+}
+.aa-head-title{ display:flex; align-items:center; gap:10px; min-width:0; }
+.aa-dot{ width:9px;height:9px;border-radius:50%;background:#00d4a8;box-shadow:0 0 0 3px rgba(0,212,168,.18);flex-shrink:0; }
+.aa-title-main{ font-family:var(--font-display); font-size:.95rem; font-weight:700; color:var(--text); line-height:1.15; }
+.aa-title-sub{ font-size:.63rem; color:var(--text3); font-family:monospace; margin-top:1px; }
+.aa-head-actions{ display:flex; gap:4px; flex-shrink:0; }
+.aa-hbtn{
+  width:30px;height:30px; display:flex;align-items:center;justify-content:center;
+  background:transparent; border:1px solid transparent; border-radius:8px;
+  color:var(--text2); cursor:pointer; font-size:.9rem; transition:all .15s;
+}
+.aa-hbtn:hover{ background:var(--accent-soft); border-color:var(--accent); color:var(--accent); }
+.aa-body{ flex:1; overflow-y:auto; padding:16px 15px; background:var(--bg); }
+.aa-empty{ text-align:center; padding:14px 8px 6px; }
+.aa-empty-icon{ font-size:2.4rem; margin-bottom:8px; }
+.aa-empty-title{ font-family:var(--font-display); font-size:1rem; font-weight:700; color:var(--text); margin-bottom:6px; }
+.aa-empty-desc{ font-size:.76rem; color:var(--text2); line-height:1.6; max-width:320px; margin:0 auto 14px; }
+.aa-suggest{ display:flex; flex-wrap:wrap; gap:7px; justify-content:center; }
+.aa-chip{
+  background:var(--bg2); border:1px solid var(--border); border-radius:8px;
+  padding:7px 11px; font-size:.72rem; font-weight:600; color:var(--text2);
+  cursor:pointer; transition:all .15s;
+}
+.aa-chip:hover{ border-color:var(--accent); color:var(--accent); background:var(--accent-soft); }
+.aa-history{ display:flex; flex-direction:column; gap:12px; }
+.aa-msg{ display:flex; gap:9px; max-width:100%; animation:aaMsgIn .18s ease-out; }
+@keyframes aaMsgIn{ from{ opacity:0; transform:translateY(6px);} to{ opacity:1; transform:translateY(0);} }
+.aa-msg-av{ width:28px;height:28px;flex-shrink:0;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.85rem; }
+.aa-msg.user{ flex-direction:row-reverse; }
+.aa-msg.user .aa-msg-av{ background:linear-gradient(135deg,#3b5ba5,#5a7fd0); }
+.aa-msg.ai .aa-msg-av{ background:linear-gradient(135deg,#8b4513,#c8a96a); }
+.aa-msg-bubble{
+  padding:10px 13px; border-radius:12px; font-size:.83rem; line-height:1.6;
+  overflow-wrap:anywhere; max-width:calc(100% - 40px);
+}
+.aa-msg.user .aa-msg-bubble{ background:linear-gradient(135deg,rgba(59,91,165,.16),rgba(90,127,208,.08)); border:1px solid rgba(90,127,208,.22); color:var(--text); }
+.aa-msg.ai .aa-msg-bubble{ background:var(--surface); border:1px solid var(--border); color:var(--text); }
+.aa-msg-bubble p{ margin:0 0 8px; } .aa-msg-bubble p:last-child{ margin-bottom:0; }
+.aa-msg-bubble h1,.aa-msg-bubble h2,.aa-msg-bubble h3{ font-size:.9rem; margin:8px 0 5px; color:var(--text); }
+.aa-msg-bubble ul,.aa-msg-bubble ol{ margin:5px 0 8px; padding-left:20px; }
+.aa-msg-bubble code{ background:var(--bg2); padding:1px 5px; border-radius:4px; font-size:.78rem; }
+.aa-msg-bubble pre{ background:var(--bg2); padding:9px 11px; border-radius:8px; overflow-x:auto; }
+.aa-typing{ display:flex; gap:4px; padding:4px 2px; }
+.aa-typing span{ width:7px;height:7px;border-radius:50%;background:var(--accent);opacity:.5;animation:aaBlink 1.2s infinite; }
+.aa-typing span:nth-child(2){ animation-delay:.2s; } .aa-typing span:nth-child(3){ animation-delay:.4s; }
+@keyframes aaBlink{ 0%,60%,100%{opacity:.25;transform:translateY(0);} 30%{opacity:1;transform:translateY(-3px);} }
+.aa-input-row{ display:flex; align-items:flex-end; gap:8px; padding:11px 12px; border-top:1px solid var(--border); background:var(--surface); flex-shrink:0; }
+.aa-input{
+  flex:1; resize:none; max-height:130px; min-height:24px; padding:9px 12px;
+  background:var(--bg); border:1px solid var(--border); border-radius:11px;
+  color:var(--text); font-family:var(--font-body); font-size:.83rem; line-height:1.5; outline:none;
+  transition:border-color .15s;
+}
+.aa-input:focus{ border-color:var(--accent); }
+.aa-send{
+  width:40px;height:40px;flex-shrink:0;border:none;border-radius:11px;cursor:pointer;
+  background:linear-gradient(135deg,#8b4513,#c8a96a); color:#fff; font-size:1rem;
+  display:flex;align-items:center;justify-content:center; transition:transform .15s,opacity .15s;
+}
+.aa-send:hover{ transform:scale(1.06); } .aa-send:disabled{ opacity:.5; cursor:not-allowed; transform:none; }
+.aa-foot{ font-size:.6rem; color:var(--text3); text-align:center; padding:0 10px 9px; background:var(--surface); flex-shrink:0; }
+
 .member-badge-email{font-size:.67rem;color:#5a5248;margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .member-expiry-row{display:flex;align-items:center;gap:6px;margin-bottom:8px;}
 .member-expiry-dot{width:6px;height:6px;border-radius:50%;background:#2e7d32;flex-shrink:0;}
@@ -2919,6 +3016,54 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
 
 <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
 
+<!-- ══════════════════════════════════════════════════════════════════════
+     FIX v13 — ASISTEN AKADEMIK (widget mengambang kanan-bawah).
+     Jalur mandiri hasil pemindahan fungsi "Dialog" dari Multi-Turn/Book.
+     Dua tampilan opsional: mini (chat kecil) & fullscreen (penuh layar).
+     Menggunakan kembali mesin dialog lama (chatMessages/sendMultiTurn) via
+     adapter aa* sehingga 100% fungsi terjaga. ═══════════════════════════ -->
+<div id="aaLauncher" class="aa-launcher hidden" onclick="toggleAsistenAkademik()" title="Asisten Akademik — dialog dengan AI">
+  <span class="aa-launcher-icon">🎓</span>
+  <span class="aa-launcher-label">Asisten Akademik</span>
+</div>
+
+<div id="aaWidget" class="aa-widget" role="dialog" aria-label="Asisten Akademik" aria-hidden="true">
+  <div class="aa-head">
+    <div class="aa-head-title">
+      <span class="aa-dot"></span>
+      <div>
+        <div class="aa-title-main">Asisten Akademik</div>
+        <div class="aa-title-sub" id="aaModelLabel">Model aktif: —</div>
+      </div>
+    </div>
+    <div class="aa-head-actions">
+      <button type="button" class="aa-hbtn" id="aaExpandBtn" onclick="toggleAsistenFullscreen()" title="Perbesar / Layar penuh">⤢</button>
+      <button type="button" class="aa-hbtn" onclick="clearAsistenChat()" title="Percakapan baru">✎</button>
+      <button type="button" class="aa-hbtn" onclick="closeAsistenAkademik()" title="Tutup">✕</button>
+    </div>
+  </div>
+  <div class="aa-body" id="aaBody">
+    <div class="aa-empty" id="aaEmpty">
+      <div class="aa-empty-icon">🎓</div>
+      <div class="aa-empty-title">Halo! Saya Asisten Akademik Anda.</div>
+      <div class="aa-empty-desc">Tanyakan apa saja seputar penulisan ilmiah — merumuskan judul, menyusun argumen, memperbaiki paragraf, mencari sudut analisis, atau melanjutkan naskah secara iteratif.</div>
+      <div class="aa-suggest" id="aaSuggest">
+        <button type="button" class="aa-chip" onclick="aaQuick('Bantu saya merumuskan 3 rumusan masalah penelitian dari topik: ')">✦ Rumuskan masalah</button>
+        <button type="button" class="aa-chip" onclick="aaQuick('Perbaiki paragraf akademik berikut agar lebih koheren dan ilmiah:\n\n')">✎ Perbaiki paragraf</button>
+        <button type="button" class="aa-chip" onclick="aaQuick('Jelaskan kerangka teori yang cocok untuk penelitian tentang: ')">📚 Kerangka teori</button>
+        <button type="button" class="aa-chip" onclick="aaQuick('Susun outline artikel jurnal IMRaD untuk topik: ')">🗂️ Outline IMRaD</button>
+      </div>
+    </div>
+    <div id="aaHistory" class="aa-history"></div>
+  </div>
+  <div class="aa-input-row">
+    <textarea id="aaInput" class="aa-input" rows="1" placeholder="Tulis pesan untuk Asisten Akademik…"
+      oninput="aaAutoGrow(this)" onkeydown="aaKeydown(event)"></textarea>
+    <button type="button" class="aa-send" id="aaSendBtn" onclick="sendAsistenAkademik()" title="Kirim (Enter)">➤</button>
+  </div>
+  <div class="aa-foot">Enter mengirim · Shift+Enter baris baru · jawaban memakai token (kata)</div>
+</div>
+
 <div class="app">
   <!-- SIDEBAR -->
   <aside class="sidebar" id="sidebar">
@@ -2937,8 +3082,8 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
         AI Writer
       </div>
       <div class="nav-item" data-page="multiwriter" onclick="navTo('multiwriter',this)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-        Multi-Turn / Book
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+        e-Book / Buku Ilmiah
       </div>
       <div class="nav-item" data-page="references" onclick="navTo('references',this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5v-15A2.5 2.5 0 016.5 2H20v20H6.5a2.5 2.5 0 010-5H20"/></svg>
@@ -3235,7 +3380,12 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
         </div>
 
         <div class="card">
-          <div class="card-title">Konfigurasi Penulisan Akademis</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
+            <div class="card-title" style="margin:0;">Konfigurasi Penulisan Akademis</div>
+            <button class="btn btn-sm btn-secondary" onclick="openTemplateLibrary('writer')" title="Template Karya Ilmiah — pustaka AI Writer lintas 20+ bidang ilmu">
+              📚 Template Karya Ilmiah
+            </button>
+          </div>
           <div class="row" style="margin-bottom:14px;">
             <div>
               <label>Mode Penulisan</label>
@@ -3542,24 +3692,25 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
       <!-- ==================== PAGE: MULTI-TURN + BOOK MODE ==================== -->
       <div class="page" id="page-multiwriter">
 
-        <!-- TOP CONTROLS -->
-        <div class="card" style="margin-bottom:14px;padding:14px 18px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
-            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-              <span style="font-size:.85rem;font-weight:700;color:var(--text);">Mode:</span>
-              <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:7px;overflow:hidden;">
-                <button class="bmt active" id="mt-tab-chat" onclick="switchMtMode('chat')">💬 Dialog</button>
-                <button class="bmt" id="mt-tab-book" onclick="switchMtMode('book')">📖 Book Mode</button>
+        <!-- TOP CONTROLS — FIX v13: halaman KHUSUS pembuatan e-Book/Buku Ilmiah.
+             Fungsi "Dialog" dipindah ke widget mengambang "Asisten Akademik". -->
+        <div class="card" style="margin-bottom:14px;padding:16px 18px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <div style="width:42px;height:42px;flex-shrink:0;border-radius:11px;background:linear-gradient(135deg,#8b4513,#c8a96a);display:flex;align-items:center;justify-content:center;font-size:1.4rem;box-shadow:0 3px 10px rgba(139,69,19,.28);">📖</div>
+              <div>
+                <div style="font-family:var(--font-display);font-size:1.12rem;font-weight:700;color:var(--text);line-height:1.2;">e-Book / Buku Ilmiah</div>
+                <div style="font-size:.72rem;color:var(--text3);margin-top:2px;">Produksi buku akademik lengkap — kerangka bab, generasi tersegmentasi, sitasi &amp; ekspor profesional</div>
               </div>
-              <button class="btn btn-sm btn-secondary" onclick="openTemplateLibrary()" title="Template Library">
-                📚 Template
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <button class="btn btn-sm btn-secondary" onclick="openTemplateLibrary('book')" title="Template Buku — pustaka e-Book/Buku Ilmiah">
+                📚 Template Buku
               </button>
               <button class="btn btn-sm btn-secondary" onclick="clearBookProject()" title="Mulai proyek baru">
                 🔄 Proyek Baru
               </button>
-            </div>
-            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-              <select id="mtModel" style="width:190px;">
+              <select id="mtModel" style="width:210px;" onchange="if(typeof aaSyncModelLabel==='function')aaSyncModelLabel();">
                 <option value="anthropic/claude-sonnet-5" selected>🏆 Claude Sonnet 5 ✨ (Terbaru — Kualitas Akademik Tertinggi)</option>
                 <option value="dual_gemini_claude">🚀 Dual-AI: Gemini + Claude ★ SMART</option>
                 <option value="dual_o4_gpt">🔬 Dual-AI: o4-mini + GPT-4o ★ DEEP</option>
@@ -3579,8 +3730,9 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
           </div>
         </div>
 
-        <!-- CHAT MODE -->
-        <div id="mt-panel-chat">
+        <!-- CHAT MODE — DIPINDAH ke widget "Asisten Akademik" (tetap ada di DOM,
+             tersembunyi, agar seluruh fungsi lama tetap berjalan 100%). -->
+        <div id="mt-panel-chat" style="display:none;">
           <div class="card">
             <div id="chatHistory" style="max-height:55vh;overflow-y:auto;margin-bottom:14px;"></div>
             <div style="display:flex;gap:8px;">
@@ -3604,8 +3756,8 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
           </div>
         </div>
 
-        <!-- BOOK MODE -->
-        <div id="mt-panel-book" style="display:none;">
+        <!-- BOOK MODE — kini SELALU tampil (halaman khusus e-Book) -->
+        <div id="mt-panel-book">
 
           <!-- Book setup (shown when no chapters yet) -->
           <div id="book-setup" class="book-setup-card">
@@ -4593,7 +4745,7 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
               <option value="sysrev">Systematic Review</option>
               <option value="paraphrase">Parafrase</option>
               <option value="review">Review Naskah</option>
-              <option value="multiwriter">Multi-Turn</option>
+              <option value="multiwriter">e-Book / Buku Ilmiah</option>
             </select>
             <button class="btn btn-sm btn-secondary" onclick="clearAllHistory()" title="Hapus semua riwayat">🗑️ Hapus Semua</button>
           </div>
@@ -5972,6 +6124,10 @@ function onAuthSuccess(session, showToast = true) {
   if (sidebarLogin) sidebarLogin.style.display = 'none';
   var berandaNav = document.getElementById('navBeranda');
   if (berandaNav) berandaNav.style.display = '';
+  // FIX v13 — tampilkan peluncur Asisten Akademik setelah login.
+  var _aaL = document.getElementById('aaLauncher');
+  if (_aaL) _aaL.classList.remove('hidden');
+  if (typeof aaSyncModelLabel === 'function') aaSyncModelLabel();
   // Navigate to writer
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -6346,6 +6502,10 @@ function doLogout() {
   if (sidebarLogin) sidebarLogin.style.display = '';
   var berandaNav = document.getElementById('navBeranda');
   if (berandaNav) berandaNav.style.display = 'none';
+  // FIX v13 — sembunyikan Asisten Akademik saat logout.
+  if (typeof closeAsistenAkademik === 'function') closeAsistenAkademik();
+  var _aaL2 = document.getElementById('aaLauncher');
+  if (_aaL2) _aaL2.classList.add('hidden');
   // Kembali ke landing page
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -11699,13 +11859,17 @@ function navTo(page, el) {
   pageEl.classList.add('active');
   if (el) el.classList.add('active');
   var titles = {
-    landing:'Beranda', writer:'AI Writer', multiwriter:'Multi-Turn Writer', references:'Reference Finder',
+    landing:'Beranda', writer:'AI Writer', multiwriter:'e-Book / Buku Ilmiah', references:'Reference Finder',
     paraphrase:'Paraphraser', reviewer:'Reviewer & Critique',
     bibliography:'Bibliography Builder', tips:'Intelligence Tips',
     converter:'Journal Converter — Q1/Q2', history:'Riwayat Dokumen'
   };
   var topbar = document.getElementById('topbarTitle');
   if (topbar) topbar.textContent = titles[page] || page;
+  // FIX v13 — halaman e-Book selalu tampil penuh (book-only): inisialisasi.
+  if (page === 'multiwriter' && typeof switchMtMode === 'function') {
+    try { switchMtMode('book'); } catch (_bm) {}
+  }
   if (window.innerWidth < 769) toggleSidebar();
   // Jika bukan halaman writer utama, sembunyikan progress bars
   if (page !== 'writer') {
@@ -14617,14 +14781,136 @@ async function sendMultiTurn() {
 
 function renderChat() {
   const el = document.getElementById('chatHistory');
-  el.innerHTML = chatMessages.map(m => `
-    <div class="chat-msg ${m.role === 'user' ? 'chat-user' : 'chat-ai'}">
-      <div class="chat-role">${m.role === 'user' ? '👤 Anda' : '🤖 Scholaris'}</div>
-      <div>${m.role === 'user' ? escHtml(m.content) : marked.parse(m.content)}</div>
-    </div>
-  `).join('');
-  el.scrollTop = el.scrollHeight;
+  if (el) {
+    el.innerHTML = chatMessages.map(m => `
+      <div class="chat-msg ${m.role === 'user' ? 'chat-user' : 'chat-ai'}">
+        <div class="chat-role">${m.role === 'user' ? '👤 Anda' : '🤖 Scholaris'}</div>
+        <div>${m.role === 'user' ? escHtml(m.content) : marked.parse(m.content)}</div>
+      </div>
+    `).join('');
+    el.scrollTop = el.scrollHeight;
+  }
+  // FIX v13 — cerminkan percakapan ke widget Asisten Akademik (kanan-bawah).
+  try { aaRenderHistory(); } catch (_aa) {}
 }
+
+// ══ ASISTEN AKADEMIK — kontrol widget mengambang ════════════════════════
+// Semua dialog memakai mesin lama (chatMessages + sendMultiTurn + _mtSingleTurn)
+// melalui adapter di bawah, sehingga fungsionalitas 100% terjaga & konsisten.
+function _aaEls() {
+  return {
+    launcher: document.getElementById('aaLauncher'),
+    widget:   document.getElementById('aaWidget'),
+    hist:     document.getElementById('aaHistory'),
+    empty:    document.getElementById('aaEmpty'),
+    input:    document.getElementById('aaInput'),
+    body:     document.getElementById('aaBody')
+  };
+}
+function openAsistenAkademik() {
+  var e = _aaEls(); if (!e.widget) return;
+  e.widget.classList.add('open');
+  e.widget.setAttribute('aria-hidden', 'false');
+  if (e.launcher) e.launcher.classList.add('hidden');
+  aaSyncModelLabel();
+  aaRenderHistory();
+  setTimeout(function(){ if (e.input) e.input.focus(); }, 60);
+}
+function closeAsistenAkademik() {
+  var e = _aaEls(); if (!e.widget) return;
+  e.widget.classList.remove('open');
+  e.widget.setAttribute('aria-hidden', 'true');
+  if (e.launcher) e.launcher.classList.remove('hidden');
+}
+function toggleAsistenAkademik() {
+  var e = _aaEls(); if (!e.widget) return;
+  if (e.widget.classList.contains('open')) closeAsistenAkademik();
+  else openAsistenAkademik();
+}
+function toggleAsistenFullscreen() {
+  var e = _aaEls(); if (!e.widget) return;
+  var full = e.widget.classList.toggle('fullscreen');
+  var btn = document.getElementById('aaExpandBtn');
+  if (btn) { btn.textContent = full ? '⤡' : '⤢'; btn.title = full ? 'Perkecil' : 'Perbesar / Layar penuh'; }
+  aaRenderHistory();
+}
+function aaSyncModelLabel() {
+  var lbl = document.getElementById('aaModelLabel');
+  var sel = document.getElementById('mtModel');
+  if (!lbl) return;
+  var txt = '—';
+  if (sel && sel.selectedIndex >= 0) {
+    txt = sel.options[sel.selectedIndex].text.replace(/^[^A-Za-z0-9]+/, '').replace(/\s*\(.*\)\s*$/, '').trim();
+  }
+  lbl.textContent = 'Model aktif: ' + (txt || '—');
+}
+function aaAutoGrow(ta) {
+  ta.style.height = 'auto';
+  ta.style.height = Math.min(130, ta.scrollHeight) + 'px';
+}
+function aaKeydown(ev) {
+  if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); sendAsistenAkademik(); }
+}
+function aaQuick(prefill) {
+  var e = _aaEls(); if (!e.input) return;
+  e.input.value = prefill;
+  aaAutoGrow(e.input);
+  e.input.focus();
+  // Letakkan kursor di akhir
+  try { e.input.setSelectionRange(e.input.value.length, e.input.value.length); } catch (_q) {}
+}
+function clearAsistenChat() {
+  if (typeof clearChat === 'function') clearChat();
+  else { chatMessages = []; }
+  aaRenderHistory();
+}
+// Render chatMessages ke dalam widget (mini/fullscreen).
+function aaRenderHistory() {
+  var e = _aaEls(); if (!e.hist) return;
+  var msgs = (typeof chatMessages !== 'undefined' && Array.isArray(chatMessages)) ? chatMessages : [];
+  if (e.empty) e.empty.style.display = msgs.length ? 'none' : '';
+  e.hist.innerHTML = msgs.map(function (m) {
+    var isUser = m.role === 'user';
+    var av = isUser ? '👤' : '🎓';
+    var content = isUser ? escHtml(m.content) : (typeof marked !== 'undefined' ? marked.parse(m.content || '') : escHtml(m.content));
+    return '<div class="aa-msg ' + (isUser ? 'user' : 'ai') + '">' +
+             '<div class="aa-msg-av">' + av + '</div>' +
+             '<div class="aa-msg-bubble">' + content + '</div>' +
+           '</div>';
+  }).join('') + (window._aaBusy ? '<div class="aa-msg ai"><div class="aa-msg-av">🎓</div><div class="aa-msg-bubble"><div class="aa-typing"><span></span><span></span><span></span></div></div></div>' : '');
+  if (e.body) e.body.scrollTop = e.body.scrollHeight;
+}
+// Kirim pesan lewat mesin dialog lama (bridge ke sendMultiTurn via #mtInput).
+async function sendAsistenAkademik() {
+  var e = _aaEls(); if (!e.input) return;
+  var text = e.input.value.trim();
+  if (!text) return;
+  if (typeof isLoggedIn === 'function' && !isLoggedIn()) { showAuthModal('login'); return; }
+
+  // Jembatani ke mesin lama: isi #mtInput lalu panggil sendMultiTurn().
+  var mtIn = document.getElementById('mtInput');
+  if (!mtIn) { toast('Mesin dialog tidak tersedia.', 4000); return; }
+  mtIn.value = text;
+  e.input.value = '';
+  aaAutoGrow(e.input);
+
+  var sendBtn = document.getElementById('aaSendBtn');
+  if (sendBtn) sendBtn.disabled = true;
+  window._aaBusy = true; aaRenderHistory();
+  try {
+    if (typeof sendMultiTurn === 'function') await sendMultiTurn();
+  } catch (_se) {
+    toast('Terjadi kendala saat memproses. Coba lagi.', 4500);
+  } finally {
+    window._aaBusy = false;
+    if (sendBtn) sendBtn.disabled = false;
+    aaRenderHistory();
+    if (e.input) e.input.focus();
+  }
+}
+
+function _originalRenderChatTail() {}
+
 function clearChat() {
   chatMessages = [];
   // FIX v10.5: reset state IMRaD continuation
@@ -18509,7 +18795,7 @@ const MODE_LABELS = {
   literature_review:'Tinjauan Pustaka', methodology:'Metodologi',
   results_discussion:'Hasil & Diskusi', conclusion:'Kesimpulan',
   abstract:'Abstrak', essay:'Esai', policy_brief:'Policy Brief',
-  paraphrase:'Parafrase', review:'Review Naskah', multiwriter:'Multi-Turn'
+  paraphrase:'Parafrase', review:'Review Naskah', multiwriter:'e-Book / Buku Ilmiah'
 };
 
 function renderHistory(query = '') {
@@ -18798,12 +19084,24 @@ function loadBookProjectLocal() {
 
 // ── MODE SWITCH ───────────────────────────────────────────────────
 function switchMtMode(mode) {
+  // FIX v13 — halaman multiwriter kini KHUSUS Book (e-Book/Buku Ilmiah). Tab
+  // Dialog dipindah ke widget "Asisten Akademik". Fungsi dijaga null-safe agar
+  // pemanggil lama tetap aman; mode chat dialihkan mulus ke widget mengambang.
+  var tabChat = document.getElementById('mt-tab-chat');
+  var tabBook = document.getElementById('mt-tab-book');
+  var panelChat = document.getElementById('mt-panel-chat');
+  var panelBook = document.getElementById('mt-panel-book');
+  if (mode === 'chat') {
+    // Alihkan ke Asisten Akademik (chat tidak lagi tampil di halaman ini).
+    if (typeof openAsistenAkademik === 'function') openAsistenAkademik();
+    mode = 'book';
+  }
   mtMode = mode;
-  document.getElementById('mt-tab-chat').classList.toggle('active', mode === 'chat');
-  document.getElementById('mt-tab-book').classList.toggle('active', mode === 'book');
-  document.getElementById('mt-panel-chat').style.display = mode === 'chat' ? '' : 'none';
-  document.getElementById('mt-panel-book').style.display = mode === 'book' ? '' : 'none';
-  if (mode === 'book') initBookMode();
+  if (tabChat) tabChat.classList.toggle('active', false);
+  if (tabBook) tabBook.classList.toggle('active', true);
+  if (panelChat) panelChat.style.display = 'none';
+  if (panelBook) panelBook.style.display = '';
+  initBookMode();
 }
 
 function initBookMode() {
@@ -21226,8 +21524,30 @@ const TEMPLATES = [
   },
 ];
 
-function openTemplateLibrary(forceCat = null) {
-  renderTLCats(forceCat || 'all');
+// FIX v13.1 — Template Library kini SADAR-JALUR (scope): 'writer' menampilkan
+// hanya template artikel/karya ilmiah (untuk AI Writer), 'book' hanya template
+// buku (untuk e-Book/Buku Ilmiah). Kategori & judul modal menyesuaikan otomatis.
+let _tlScope = 'writer';   // 'writer' | 'book'
+
+function _tlIsBookTpl(t) { return t.cat === 'book' || !!t.bookChapters ||
+  (t.mode && /book_chapter|thesis_chapter|policy_brief/.test(t.mode)); }
+
+function openTemplateLibrary(scope) {
+  // Kompatibilitas mundur: pemanggil lama openTemplateLibrary('book') tetap valid.
+  _tlScope = (scope === 'book') ? 'book' : 'writer';
+  var titleEl = document.getElementById('tlTitle');
+  if (titleEl) {
+    titleEl.textContent = _tlScope === 'book'
+      ? '📖 Template Buku — Pustaka e-Book / Buku Ilmiah'
+      : '📚 Template Karya Ilmiah — Pustaka AI Writer';
+  }
+  var subEl = document.getElementById('tlSubtitle');
+  if (subEl) {
+    subEl.textContent = _tlScope === 'book'
+      ? 'Kerangka buku siap-pakai: buku ajar, monografi, tesis/disertasi, populer-ilmiah, hingga policy brief.'
+      : 'Template artikel jurnal & karya ilmiah lintas 20+ bidang ilmu — langsung terisi ke AI Writer.';
+  }
+  renderTLCats('all');
   renderTLGrid('all', '');
   document.getElementById('tlOverlay').classList.add('active');
   document.getElementById('tlSearch').value = '';
@@ -21237,9 +21557,20 @@ function closeTL() {
   document.getElementById('tlOverlay').classList.remove('active');
 }
 
+// Kategori yang relevan dengan scope aktif.
+function _tlCatsForScope() {
+  if (_tlScope === 'book') {
+    return TEMPLATE_CATS.filter(function (c) { return c.id === 'all' || c.id === 'book'; })
+      .map(function (c) { return c.id === 'all' ? { id:'all', label:'📖 Semua Template Buku', icon:'📖' } : c; });
+  }
+  // writer: semua kategori bidang ilmu KECUALI 'book'
+  return TEMPLATE_CATS.filter(function (c) { return c.id !== 'book'; })
+    .map(function (c) { return c.id === 'all' ? { id:'all', label:'🌐 Semua Bidang Ilmu', icon:'🌐' } : c; });
+}
+
 function renderTLCats(activeCat) {
   const el = document.getElementById('tlCats');
-  el.innerHTML = TEMPLATE_CATS.map(c => `
+  el.innerHTML = _tlCatsForScope().map(c => `
     <div class="tl-cat-item ${c.id===activeCat?'active':''}"
       onclick="renderTLGrid('${c.id}','');document.querySelectorAll('.tl-cat-item').forEach(e=>e.classList.remove('active'));this.classList.add('active');">
       ${c.icon} ${c.label}
@@ -21248,7 +21579,8 @@ function renderTLCats(activeCat) {
 
 function renderTLGrid(cat, query) {
   const el = document.getElementById('tlGrid');
-  let tpls = TEMPLATES;
+  // Batasi dulu ke scope aktif (writer = non-book, book = book).
+  let tpls = TEMPLATES.filter(t => _tlScope === 'book' ? _tlIsBookTpl(t) : !_tlIsBookTpl(t));
   if (cat && cat !== 'all') tpls = tpls.filter(t => t.cat === cat);
   if (query) {
     const q = query.toLowerCase();
@@ -21282,40 +21614,42 @@ function applyTemplate(id) {
   const tpl = TEMPLATES.find(t => t.id === id);
   if (!tpl) return;
 
-  // Apply to AI Writer
-  const titleEl  = document.getElementById('writeTitle');
-  const modeEl   = document.getElementById('writeMode');
-  const langEl   = document.getElementById('writeLang');
-  const citeEl   = document.getElementById('citeStyle');
-  const instrEl  = document.getElementById('writeInstructions');
+  const isBookTpl = _tlIsBookTpl(tpl);
 
-  if (titleEl)  titleEl.value  = tpl.title_tpl || '';
-  if (modeEl)   modeEl.value   = tpl.mode || 'article_full';
-  if (langEl)   langEl.value   = tpl.lang || 'id';
-  if (citeEl)   citeEl.value   = tpl.cite || 'apa7';
-  if (instrEl)  instrEl.value  = tpl.instructions || '';
-
-  // If book template with chapters, set up book mode
-  if (tpl.bookChapters) {
-    tempChapters = tpl.bookChapters.map((title, i) => ({
-      title, wt: tpl.id === 'b03' ? 8000 : 5000
-    }));
+  if (isBookTpl) {
+    // ── Template BUKU → jalur e-Book/Buku Ilmiah ──
+    // Isi konfigurasi buku (judul, tipe). Bila punya daftar bab, set kerangka.
     const bookTitleEl = document.getElementById('bookTitle');
     const bookTypeEl  = document.getElementById('bookType');
-    if (bookTitleEl) bookTitleEl.value = tpl.title_tpl;
+    if (bookTitleEl) bookTitleEl.value = tpl.title_tpl || '';
     if (bookTypeEl) {
-      if (tpl.id === 'b01' || tpl.id === 'b04') bookTypeEl.value = tpl.id === 'b04' ? 'popular' : 'textbook';
+      if (tpl.id === 'b01') bookTypeEl.value = 'textbook';
+      else if (tpl.id === 'b04') bookTypeEl.value = 'popular';
       else if (tpl.id === 'b02') bookTypeEl.value = 'monograph';
       else if (tpl.id === 'b03') bookTypeEl.value = 'thesis';
+      else bookTypeEl.value = 'academic';
     }
-    renderChapterEditor();
-    // Switch to book mode
-    switchMtMode('book');
-    const writerNav = document.querySelector('[data-page="multiwriter"]');
-    navTo('multiwriter', writerNav);
-    toast(`📖 Template "${tpl.title}" diterapkan ke Book Mode!`, 4000);
+    if (tpl.bookChapters) {
+      tempChapters = tpl.bookChapters.map((title) => ({ title, wt: tpl.id === 'b03' ? 8000 : 5000 }));
+      if (typeof renderChapterEditor === 'function') renderChapterEditor();
+    }
+    // Buka halaman e-Book (book-only) & inisialisasi.
+    const ebookNav = document.querySelector('[data-page="multiwriter"]');
+    navTo('multiwriter', ebookNav);
+    if (typeof switchMtMode === 'function') switchMtMode('book');
+    toast(`📖 Template "${tpl.title}" diterapkan ke e-Book / Buku Ilmiah!`, 4000);
   } else {
-    // Navigate to writer
+    // ── Template KARYA ILMIAH → jalur AI Writer ──
+    const titleEl  = document.getElementById('writeTitle');
+    const modeEl   = document.getElementById('writeMode');
+    const langEl   = document.getElementById('writeLang');
+    const citeEl   = document.getElementById('citeStyle');
+    const instrEl  = document.getElementById('writeInstructions');
+    if (titleEl)  titleEl.value  = tpl.title_tpl || '';
+    if (modeEl)   modeEl.value   = tpl.mode || 'article_full';
+    if (langEl)   langEl.value   = tpl.lang || 'id';
+    if (citeEl)   citeEl.value   = tpl.cite || 'apa7';
+    if (instrEl)  instrEl.value  = tpl.instructions || '';
     const writerNav = document.querySelector('[data-page="writer"]');
     navTo('writer', writerNav);
     if (typeof onModeChange === 'function') onModeChange();
@@ -24412,8 +24746,11 @@ if (typeof _bridgeDispatch !== 'undefined') {
 <div class="template-library-overlay" id="tlOverlay">
   <div class="tl-modal">
     <div class="tl-header">
-      <span class="tl-title">📚 Template Library — 20+ Bidang Ilmu</span>
-      <div style="display:flex;gap:8px;align-items:center;">
+      <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+        <span class="tl-title" id="tlTitle">📚 Template Karya Ilmiah — Pustaka AI Writer</span>
+        <span id="tlSubtitle" style="font-size:.68rem;color:var(--text3);line-height:1.35;">Template artikel jurnal &amp; karya ilmiah lintas 20+ bidang ilmu — langsung terisi ke AI Writer.</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
         <input type="text" class="tl-search" id="tlSearch" placeholder="Cari template..." oninput="filterTemplates(this.value)">
         <button class="btn btn-sm btn-secondary" onclick="closeTL()">✕</button>
       </div>
