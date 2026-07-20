@@ -5068,8 +5068,21 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
             </div>
 
             <div style="margin-bottom:14px;">
-              <label>Tempel Teks Dokumen Sumber <span style="font-weight:400;color:var(--text3);">(Boleh seluruh dokumen, bab inti, atau gabungan bagian terpenting — makin lengkap makin baik)</span></label>
-              <textarea id="jcSourceText" rows="14" placeholder="Tempel teks skripsi/tesis/disertasi/laporan/buku Anda di sini...&#10;&#10;Tips: Sertakan minimal: Bab Pendahuluan, Tinjauan Pustaka, Metodologi, Hasil & Pembahasan, dan Kesimpulan. Jika terlalu panjang, prioritaskan bagian Temuan dan Analisis."></textarea>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+                <label style="margin:0;">Dokumen Sumber <span style="font-weight:400;color:var(--text3);">(Boleh seluruh dokumen, bab inti, atau gabungan bagian terpenting — makin lengkap makin baik)</span></label>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <button type="button" class="btn btn-sm btn-secondary" style="padding:4px 12px;font-size:.72rem;"
+                    onclick="document.getElementById('jcSourceFiles').click()"
+                    title="Unggah file naskah (.doc .docx .pdf .txt .md .rtf) untuk dibaca otomatis, dianalisis, & dikonversi utuh">📎 Unggah File (doc/docx/pdf)</button>
+                  <span id="jcSourceCounter" style="font-size:.65rem;color:var(--text3);">0 kata</span>
+                </div>
+              </div>
+              <input type="file" id="jcSourceFiles" multiple accept=".txt,.md,.markdown,.csv,.json,.html,.htm,.rtf,.doc,.docx,.pdf,text/plain,application/msword"
+                     style="display:none;" onchange="handleJcSourceFiles(this)">
+              <div id="jcSourceStatus" style="font-size:.68rem;color:#818cf8;margin-bottom:6px;min-height:0;"></div>
+              <textarea id="jcSourceText" rows="14" placeholder="Tempel teks skripsi/tesis/disertasi/laporan/buku Anda di sini — atau klik 📎 Unggah File untuk memuat naskah (.doc / .docx / .pdf) yang akan dibaca & dikonversi secara utuh.&#10;&#10;Tips: Sertakan minimal: Bab Pendahuluan, Tinjauan Pustaka, Metodologi, Hasil & Pembahasan, dan Kesimpulan. Jika terlalu panjang, prioritaskan bagian Temuan dan Analisis."
+                oninput="jcUpdateSourceCounter(this)"
+                ondragover="_jcDragOver(event)" ondragleave="_jcDragLeave(event)" ondrop="_jcDrop(event)"></textarea>
             </div>
 
             <div class="row" style="margin-bottom:16px;">
@@ -15837,6 +15850,101 @@ function _paraDrop(e) {
   e.preventDefault();
   if (e.currentTarget && e.currentTarget.style) e.currentTarget.style.outline = '';
   handleParaSourceFiles({ files: e.dataTransfer.files, value: '' });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// FIX v13.4 — JOURNAL CONVERTER: unggah file (.doc/.docx/.pdf/.txt/.md/.rtf/…),
+// baca otomatis, muat teks LENGKAP ke #jcSourceText agar pipeline analisis →
+// kerangka → konversi memroses naskah utuh. Memakai ULANG parser yang sama
+// (_readDocFile / _readDocxFile / _readPdfFile / _readTextFile) yang telah
+// terbukti dipakai Paraphraser & Book Mode — nol duplikasi, nol regresi.
+// ════════════════════════════════════════════════════════════════════════════
+async function handleJcSourceFiles(input) {
+  var files = Array.prototype.slice.call(input.files || []);
+  if (!files.length) return;
+  var statusEl = document.getElementById('jcSourceStatus');
+  var ta = document.getElementById('jcSourceText');
+  if (!ta) return;
+
+  var loaded = [], failed = [], totalChars = 0;
+  for (var i = 0; i < files.length; i++) {
+    var f = files[i];
+    var ext = (f.name.split('.').pop() || '').toLowerCase();
+    if (statusEl) statusEl.textContent = '⏳ Membaca "' + f.name + '"' + (ext === 'pdf' || ext === 'docx' ? ' (memuat pembaca ' + ext.toUpperCase() + '…)' : '') + '…';
+    try {
+      var txt = '';
+      if (['txt', 'md', 'markdown', 'csv', 'json', 'html', 'htm', 'rtf'].indexOf(ext) >= 0) txt = await _readTextFile(f);
+      else if (ext === 'doc') txt = await _readDocFile(f);
+      else if (ext === 'docx') txt = await _readDocxFile(f);
+      else if (ext === 'pdf') txt = await _readPdfFile(f);
+      else txt = await _readTextFile(f);
+      if (ext === 'html' || ext === 'htm') txt = txt.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ');
+      if (ext === 'rtf') txt = _jcStripRtf(txt);
+      txt = String(txt || '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+      if (txt) { loaded.push({ name: f.name, text: txt, chars: txt.length }); totalChars += txt.length; }
+      else failed.push(f.name + ' (kosong)');
+    } catch (e) {
+      failed.push(f.name + ' (' + (e && e.message ? e.message : 'gagal') + ')');
+    }
+  }
+
+  if (loaded.length) {
+    var existing = ta.value.trim();
+    var incoming = loaded.map(function (x) { return x.text; }).join('\n\n');
+    ta.value = existing ? (existing + '\n\n' + incoming) : incoming;
+    jcUpdateSourceCounter(ta);
+  }
+
+  if (statusEl) {
+    var msg = [];
+    if (loaded.length) msg.push('✅ ' + loaded.length + ' file dimuat (' + totalChars.toLocaleString('id-ID') + ' karakter): ' + loaded.map(function (x) { return x.name; }).join(', '));
+    if (failed.length) msg.push('⚠️ gagal: ' + failed.join('; ') + ' — silakan tempel teksnya langsung.');
+    statusEl.innerHTML = msg.join('<br>');
+  }
+  if (loaded.length) {
+    var wc = countWords(ta.value);
+    toast('📎 Dokumen dimuat: ' + wc.toLocaleString('id-ID') + ' kata siap dianalisis & dikonversi.', 4000);
+  } else if (failed.length) {
+    toast('Tidak ada file yang berhasil dibaca. Coba tempel teksnya langsung.', 5000);
+  }
+  input.value = '';
+}
+
+// Pembersih RTF ringan (buang control words & grup) — cukup untuk teks naskah.
+function _jcStripRtf(s) {
+  if (!s || s.indexOf('\\rtf') === -1) return s;
+  return s
+    .replace(/\\'[0-9a-fA-F]{2}/g, ' ')
+    .replace(/\\[a-zA-Z]+-?\d* ?/g, ' ')
+    .replace(/[{}]/g, ' ')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function jcUpdateSourceCounter(ta) {
+  var el = ta || document.getElementById('jcSourceText');
+  if (!el) return;
+  var wc = el.value.trim() ? el.value.trim().split(/\s+/).filter(Boolean).length : 0;
+  var counter = document.getElementById('jcSourceCounter');
+  if (counter) counter.textContent = wc.toLocaleString('id-ID') + ' kata';
+}
+
+// Seret-lepas file ke area teks Journal Converter.
+function _jcDragOver(e) {
+  if (e && e.dataTransfer && e.dataTransfer.types && Array.prototype.indexOf.call(e.dataTransfer.types, 'Files') >= 0) {
+    e.preventDefault();
+    if (e.currentTarget && e.currentTarget.style) e.currentTarget.style.outline = '2px dashed #818cf8';
+  }
+}
+function _jcDragLeave(e) {
+  if (e && e.currentTarget && e.currentTarget.style) e.currentTarget.style.outline = '';
+}
+function _jcDrop(e) {
+  if (!e || !e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+  e.preventDefault();
+  if (e.currentTarget && e.currentTarget.style) e.currentTarget.style.outline = '';
+  handleJcSourceFiles({ files: e.dataTransfer.files, value: '' });
 }
 
 function updateParaCounter(ta) {
