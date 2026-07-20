@@ -123,6 +123,42 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
 }
 .output-area h1,.output-area h2,.output-area h3 { font-family: var(--font-display); margin: 16px 0 8px; }
 .output-area h1 { font-size: 1.3rem; }
+/* ══ FIX v13.5 — VISUAL AKADEMIK: tabel & gambar (diagram/kerangka/flowchart) ══
+   Gaya elegan, profesional, konsisten dengan kaidah penulisan ilmiah. */
+.output-area table, .aa-msg-bubble table, .jc-output table {
+  border-collapse: collapse; width: 100%; margin: 10px 0 6px;
+  font-size: .84rem; line-height: 1.5; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+}
+.output-area thead th, .aa-msg-bubble thead th, .jc-output thead th {
+  background: linear-gradient(135deg, rgba(139,69,19,.16), rgba(245,222,179,.06));
+  color: var(--text); font-weight: 700; text-align: left;
+  padding: 9px 12px; border-bottom: 2px solid var(--accent);
+  font-size: .8rem; letter-spacing: .01em;
+}
+.output-area tbody td, .aa-msg-bubble tbody td, .jc-output tbody td {
+  padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--text2); vertical-align: top;
+}
+.output-area tbody tr:last-child td, .jc-output tbody tr:last-child td { border-bottom: none; }
+.output-area tbody tr:nth-child(even), .jc-output tbody tr:nth-child(even) { background: rgba(255,255,255,.02); }
+.output-area tbody tr:hover, .jc-output tbody tr:hover { background: var(--accent-soft); }
+/* Caption visual (Tabel N. / Gambar N.) — dari **bold** di baris tersendiri */
+.acad-figure {
+  margin: 18px 0; padding: 16px; text-align: center;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+}
+.acad-figure svg { max-width: 100%; height: auto; }
+.acad-figure-caption, .acad-table-caption {
+  font-size: .8rem; color: var(--text2); font-style: italic;
+  margin-top: 10px; line-height: 1.5;
+}
+.acad-table-caption { text-align: left; margin: 14px 0 2px; font-style: normal; font-weight: 600; color: var(--text); }
+.acad-figure-caption b, .acad-table-caption b, .acad-figure-caption strong, .acad-table-caption strong { color: var(--accent); font-style: normal; }
+.acad-figure-error {
+  font-size: .72rem; color: #b45309; background: rgba(180,83,9,.08);
+  border: 1px dashed rgba(180,83,9,.3); border-radius: 8px; padding: 10px; text-align: left;
+}
+.mermaid-pending { display: none; }
 .output-area h2 { font-size: 1.15rem; }
 .output-area h3 { font-size: 1rem; }
 .output-area p { margin-bottom: 10px; }
@@ -5318,7 +5354,7 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
               <button class="btn btn-sm btn-secondary" onclick="jcExportPDF()">📕 PDF</button>
               <button class="btn btn-sm btn-secondary" onclick="jcAddToBibliography()">📚 Ke Bibliografi</button>
             </div>
-            <div class="output-area" id="jcFinalArea"></div>
+            <div class="output-area jc-output" id="jcFinalArea"></div>
             <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
               <button class="btn btn-primary" onclick="jcRunReview()">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
@@ -12402,7 +12438,20 @@ ABSOLUTE RULES — NEVER VIOLATE:
 9. Maintain epistemic precision — distinguish facts, scholarly consensus, and emerging debates.
 10. NEVER truncate, summarize early, or stop before completing the full requested section.
 11. Write COMPLETELY — do not stop mid-section or say "to be continued."
-12. Target word counts are MINIMUM floors, not ceilings — exceed them when the subject demands depth.`;
+12. Target word counts are MINIMUM floors, not ceilings — exceed them when the subject demands depth.
+
+VISUAL ACADEMIC ELEMENTS (diagram, kerangka teoretik, flowchart, tabel) — WHEN GENUINELY RELEVANT:
+13. Where a concept is inherently structural, comparative, procedural, or relational, ADD a scholarly visual to aid the reader — but ONLY when it adds real analytical value. Never decorate; every visual must be referred to in the surrounding prose and interpreted (never left to "speak for itself").
+14. Use these formats EXACTLY (they render automatically):
+   - TABLES → GitHub-flavored Markdown tables. ALWAYS precede with a numbered caption line in bold on its own line, e.g. "**Tabel 1.** Perbandingan paradigma epistemologis." then the table. Keep tables ≤6 columns; use concise header cells.
+   - DIAGRAMS / THEORETICAL FRAMEWORKS / FLOWCHARTS → a fenced code block with language "mermaid". ALWAYS precede with a bold numbered caption, e.g. "**Gambar 1.** Kerangka teoretik penelitian." Choose the right Mermaid type:
+       • flowchart TD/LR — alur proses, prosedur metodologis, tahapan (mis. PRISMA), pengambilan keputusan
+       • graph TD — kerangka teoretik / kerangka berpikir / hubungan antar-konsep/variabel
+       • sequenceDiagram — interaksi/urutan aktor
+       • mindmap — pemetaan konsep bertingkat
+   - Keep Mermaid node labels SHORT (≤6 words), use quotes around labels containing spaces or non-ASCII, and avoid parentheses/semicolons/special chars inside labels (use them outside, in prose). Prefer 4–12 nodes — clarity over complexity.
+15. Number visuals sequentially per type across the whole document (Tabel 1, Tabel 2…; Gambar 1, Gambar 2…). After each visual, add at least one sentence of academic interpretation. Do NOT overuse: typically 0–1 visual per major section, only where it genuinely clarifies.
+16. Captions and all visual text must be written in ${langName}.`;
 
   const modeInstructions = {
     article_full:        `Write a COMPLETE academic article in full IMRaD structure: Title, Abstract (bilingual ID-EN, 200-250 words each), Keywords (5-7), Introduction (research context, gap, RQ, objectives, structure overview), Literature Review (thematic synthesis, not chronological summary), Methodology (design, sample, instruments, analysis, validity), Results & Discussion (findings + critical analysis + literature dialogue), Conclusion & Recommendations (summary + contribution + future research), References. Target: 6,000–8,000 words minimum.`,
@@ -18077,6 +18126,104 @@ function formatHarvard(ref) {
 }
 
 // ---- DISPLAY ----
+// ════════════════════════════════════════════════════════════════════════════
+// FIX v13.5 — VISUAL AKADEMIK: render diagram/kerangka teoretik/flowchart (Mermaid)
+// + rapikan caption Tabel/Gambar. Dipanggil setelah marked.parse menaruh HTML.
+// Aman & non-blocking: bila Mermaid gagal dimuat/parse, blок kode ditampilkan apa
+// adanya dengan catatan — tidak pernah menghentikan render naskah.
+// ════════════════════════════════════════════════════════════════════════════
+var _mermaidReady = false;
+var _mermaidSeq = 0;
+async function _ensureMermaid() {
+  if (_mermaidReady && typeof mermaid !== 'undefined') return true;
+  try {
+    await _lazyLoadScript('https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js');
+    if (typeof mermaid === 'undefined') return false;
+    mermaid.initialize({
+      startOnLoad: false, securityLevel: 'strict', theme: 'base',
+      themeVariables: {
+        fontFamily: 'Inter, system-ui, sans-serif', fontSize: '14px',
+        primaryColor: '#f5ecd8', primarydBorderColor: '#c8a96a', primaryBorderColor: '#c8a96a',
+        primaryTextColor: '#2a2118', lineColor: '#8b7355', secondaryColor: '#eadfc8',
+        tertiaryColor: '#f8f3e8'
+      }
+    });
+    _mermaidReady = true;
+    return true;
+  } catch (e) { console.warn('[mermaid] gagal dimuat (non-fatal):', e.message); return false; }
+}
+
+// Ubah caption "**Tabel 1.** ..." / "**Gambar 1.** ..." yang berdiri sendiri
+// menjadi elemen caption berkelas, lalu render blok mermaid menjadi SVG.
+async function _renderAcademicVisuals(areaId) {
+  var root = document.getElementById(areaId);
+  if (!root) return;
+
+  // 1) Caption tabel: paragraf yang HANYA berisi <strong>Tabel N. ...</strong> tepat sebelum <table>
+  try {
+    var paras = root.querySelectorAll('p');
+    paras.forEach(function (p) {
+      var txt = (p.textContent || '').trim();
+      if (/^(Tabel|Table)\s+\d+[.:]/i.test(txt) && p.querySelector('strong,b')) {
+        var nx = p.nextElementSibling;
+        if (nx && nx.tagName === 'TABLE') { p.classList.add('acad-table-caption'); }
+      }
+    });
+  } catch (_ct) {}
+
+  // 2) Blok Mermaid: marked mengeluarkan <pre><code class="language-mermaid">...</code></pre>
+  var blocks = Array.prototype.slice.call(root.querySelectorAll('pre code.language-mermaid, pre code.lang-mermaid, code.language-mermaid'));
+  if (!blocks.length) return;
+
+  var okLib = await _ensureMermaid();
+  for (var i = 0; i < blocks.length; i++) {
+    var codeEl = blocks[i];
+    var pre = codeEl.closest('pre') || codeEl;
+    var src = (codeEl.textContent || '').trim();
+
+    // Caption "**Gambar N. ...**" tepat sebelum blok → jadikan bagian figure.
+    var capEl = null;
+    var prev = pre.previousElementSibling;
+    if (prev && prev.tagName === 'P' && /^(Gambar|Figure|Diagram|Bagan)\s+\d+[.:]/i.test((prev.textContent || '').trim())) {
+      capEl = prev;
+    }
+
+    var fig = document.createElement('div');
+    fig.className = 'acad-figure';
+
+    if (!okLib) {
+      // Fallback: tampilkan kode diagram apa adanya + catatan (tidak menghentikan naskah).
+      var errBox = document.createElement('div');
+      errBox.className = 'acad-figure-error';
+      errBox.textContent = '⚠️ Diagram tidak dapat dirender (pustaka visual gagal dimuat). Sumber diagram: ' + src.slice(0, 400);
+      fig.appendChild(errBox);
+    } else {
+      try {
+        _mermaidSeq++;
+        var id = 'acadmmd_' + Date.now() + '_' + _mermaidSeq;
+        var out = await mermaid.render(id, src);
+        var holder = document.createElement('div');
+        holder.innerHTML = out.svg;
+        fig.appendChild(holder.firstChild);
+      } catch (e) {
+        var errBox2 = document.createElement('div');
+        errBox2.className = 'acad-figure-error';
+        errBox2.textContent = '⚠️ Diagram tidak dapat dirender (' + (e && e.message ? e.message.slice(0, 120) : 'sintaks') + '). Sumber: ' + src.slice(0, 300);
+        fig.appendChild(errBox2);
+        try { var st = document.getElementById(id); if (st && st.parentNode) st.parentNode.removeChild(st); } catch (_rm) {}
+      }
+    }
+
+    // Sisipkan figure menggantikan <pre>, pindahkan caption ke dalam figure (di bawah).
+    if (pre.parentNode) pre.parentNode.insertBefore(fig, pre);
+    if (capEl) {
+      capEl.classList.add('acad-figure-caption');
+      fig.appendChild(capEl);
+    }
+    if (pre.parentNode) pre.parentNode.removeChild(pre);
+  }
+}
+
 function displayOutput(md, areaId, cardId) {
   // Auto AI Score on main output
   if (areaId === 'outputArea' && md && md.trim().length > 100) {
@@ -18086,6 +18233,8 @@ function displayOutput(md, areaId, cardId) {
   document.getElementById(cardId).style.display = '';
   const html = marked.parse(md);
   document.getElementById(areaId).innerHTML = html;
+  // FIX v13.5 — render diagram/kerangka/flowchart (Mermaid) + rapikan caption visual.
+  try { _renderAcademicVisuals(areaId); } catch (_rv) { console.warn('[visual] non-fatal:', _rv.message); }
   const wc = countWords(md);
   document.getElementById('wordCount').textContent = wc.toLocaleString() + ' kata';
 }
@@ -18468,10 +18617,11 @@ function _docxBuildTable(rows) {
 }
 
 // Block-level markdown → array of Paragraph/Table
-function _docxMarkdownToChildren(markdown) {
+function _docxMarkdownToChildren(markdown, opts) {
+  opts = opts || {};
   var L = _docxLib(); if (!L) return [];
   var Paragraph = L.Paragraph, TextRun = L.TextRun, HeadingLevel = L.HeadingLevel,
-      AlignmentType = L.AlignmentType, BorderStyle = L.BorderStyle;
+      AlignmentType = L.AlignmentType, BorderStyle = L.BorderStyle, ImageRun = L.ImageRun;
   var lines = String(markdown || '').replace(/\r\n/g, '\n').split('\n');
   var children = [];
   var i = 0;
@@ -18484,6 +18634,49 @@ function _docxMarkdownToChildren(markdown) {
     var line = lines[i];
     var trimmed = line.trim();
     if (!trimmed) { i++; continue; }
+
+    // FIX v13.5 — blok berpagar ```...```. Untuk ```mermaid``` diubah menjadi GAMBAR
+    // (dari SVG yang telah dirender di layar → PNG) agar diagram ikut ke DOCX. Blok
+    // kode lain ditampilkan sebagai teks monospace. Tidak pernah membuang konten.
+    var fence = trimmed.match(/^```+\s*([a-zA-Z0-9_-]*)/);
+    if (fence) {
+      var lang = (fence[1] || '').toLowerCase();
+      var codeLines = []; i++;
+      while (i < lines.length && !/^```+\s*$/.test(lines[i].trim())) { codeLines.push(lines[i]); i++; }
+      if (i < lines.length) i++; // lewati penutup ```
+      var codeSrc = codeLines.join('\n');
+      if (lang === 'mermaid') {
+        var imgAdded = false;
+        try {
+          var png = (opts && opts.mermaidImages) ? opts.mermaidImages[_docxNormMmd(codeSrc)] : null;
+          if (png && png.dataUrl && ImageRun) {
+            var b64 = png.dataUrl.split(',')[1];
+            var bytes = Uint8Array.from(atob(b64), function (c) { return c.charCodeAt(0); });
+            var maxW = 560, w = png.w || 560, hh = png.h || 320;
+            var scale = w > maxW ? maxW / w : 1;
+            children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 120, after: 40 },
+              children: [ new ImageRun({ data: bytes, transformation: { width: Math.round(w * scale), height: Math.round(hh * scale) } }) ] }));
+            imgAdded = true;
+          }
+        } catch (_mm) { imgAdded = false; }
+        if (!imgAdded) {
+          // Fallback aman: tampilkan sumber diagram sebagai teks monospace + catatan.
+          children.push(new Paragraph({ spacing: { before: 80, after: 20 },
+            children: [new TextRun({ text: '[Diagram]', italics: true, color: '8B4513', font: _DOCX_FONT, size: _DOCX_BODY_HP })] }));
+          codeLines.forEach(function (cl) {
+            children.push(new Paragraph({ spacing: { after: 0 },
+              children: [new TextRun({ text: cl, font: 'Consolas', size: 18, color: '555555' })] }));
+          });
+        }
+        continue;
+      }
+      // Blok kode non-mermaid → teks monospace.
+      codeLines.forEach(function (cl) {
+        children.push(new Paragraph({ spacing: { after: 0 },
+          children: [new TextRun({ text: cl, font: 'Consolas', size: 18, color: '444444' })] }));
+      });
+      continue;
+    }
 
     if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
       children.push(new Paragraph({ border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: 'CCCCCC', space: 1 } },
@@ -18575,7 +18768,7 @@ function _docxBuildDocument(markdown, opts) {
   var dateStr = opts.dateStr || '';
   var wordInfo = opts.wordInfo || '';
 
-  var body = _docxMarkdownToChildren(markdown);
+  var body = _docxMarkdownToChildren(markdown, opts);
 
   var head = [];
   if (opts.cover !== false) {
@@ -18635,20 +18828,89 @@ function _downloadDocxBlob(blob, filename) {
   setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 2500);
 }
 
+// FIX v13.5 — normalisasi sumber mermaid untuk pencocokan (spasi/rn diseragamkan).
+function _docxNormMmd(src) {
+  return String(src || '').replace(/\r\n/g, '\n').replace(/[ \t]+/g, ' ').trim();
+}
+
+// Kumpulkan gambar (PNG dataURL) dari SVG mermaid yang SUDAH dirender di layar,
+// dipetakan berdasar sumber diagram → agar bisa disisipkan ke DOCX. Non-blocking:
+// bila tidak ada SVG (mis. diekspor dari History), lewati dengan aman.
+async function _collectMermaidImagesFromDOM(markdown) {
+  var map = {};
+  try {
+    // Ambil sumber-sumber mermaid dari markdown.
+    var srcs = [];
+    var re = /```+\s*mermaid\s*\n([\s\S]*?)```/g, m;
+    while ((m = re.exec(markdown)) !== null) srcs.push(_docxNormMmd(m[1]));
+    if (!srcs.length) return map;
+
+    // Render tiap sumber ke SVG (pakai mermaid langsung; independen dari DOM layar
+    // agar konsisten walau area tak terlihat), lalu SVG→PNG via canvas.
+    var okLib = await _ensureMermaid();
+    if (!okLib) return map;
+    for (var i = 0; i < srcs.length; i++) {
+      try {
+        _mermaidSeq++;
+        var id = 'docxmmd_' + Date.now() + '_' + _mermaidSeq;
+        var out = await mermaid.render(id, srcs[i]);
+        var png = await _svgToPngDataUrl(out.svg);
+        if (png) map[srcs[i]] = png;
+        try { var st = document.getElementById(id); if (st && st.parentNode) st.parentNode.removeChild(st); } catch (_r) {}
+      } catch (_e) { /* lewati diagram yang gagal — fallback teks dipakai */ }
+    }
+  } catch (_c) {}
+  return map;
+}
+
+// SVG string → {dataUrl,w,h} PNG via Image+canvas (resolusi 2×, latar putih).
+function _svgToPngDataUrl(svgStr) {
+  return new Promise(function (resolve) {
+    try {
+      var wm = svgStr.match(/width="([\d.]+)"/), hm = svgStr.match(/height="([\d.]+)"/);
+      var vb = svgStr.match(/viewBox="[\d.]+ [\d.]+ ([\d.]+) ([\d.]+)"/);
+      var w = wm ? parseFloat(wm[1]) : (vb ? parseFloat(vb[1]) : 600);
+      var h = hm ? parseFloat(hm[1]) : (vb ? parseFloat(vb[2]) : 360);
+      if (!w || !h) { w = 600; h = 360; }
+      var scale = 2;
+      var svg64 = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgStr)));
+      var img = new Image();
+      img.onload = function () {
+        try {
+          var canvas = document.createElement('canvas');
+          canvas.width = Math.round(w * scale); canvas.height = Math.round(h * scale);
+          var ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve({ dataUrl: canvas.toDataURL('image/png'), w: w, h: h });
+        } catch (e) { resolve(null); }
+      };
+      img.onerror = function () { resolve(null); };
+      img.src = svg64;
+    } catch (e) { resolve(null); }
+  });
+}
+
 // Ekspor .docx native. Return Promise<boolean> (true=berhasil). Fallback bila gagal.
 function exportNativeDocx(markdown, filename, opts) {
   return new Promise(function (resolve) {
     var L = _docxLib();
     if (!L) { resolve(false); return; }
     if (!markdown || !String(markdown).trim()) { resolve(false); return; }
-    try {
-      var doc = _docxBuildDocument(markdown, opts || {});
-      if (!doc) { resolve(false); return; }
-      L.Packer.toBlob(doc).then(function (blob) {
-        try { _downloadDocxBlob(blob, filename); resolve(true); }
-        catch (e) { console.error('[exportNativeDocx] download error:', e); resolve(false); }
-      }).catch(function (e) { console.error('[exportNativeDocx] pack error:', e); resolve(false); });
-    } catch (e) { console.error('[exportNativeDocx] build error:', e); resolve(false); }
+    // FIX v13.5 — kumpulkan gambar diagram dulu (bila ada), lalu bangun dokumen.
+    var _hasMermaid = /```+\s*mermaid\s*\n/.test(String(markdown));
+    var _prep = _hasMermaid ? _collectMermaidImagesFromDOM(markdown) : Promise.resolve({});
+    _prep.then(function (mmdImages) {
+      try {
+        var mergedOpts = Object.assign({}, opts || {}, { mermaidImages: mmdImages || {} });
+        var doc = _docxBuildDocument(markdown, mergedOpts);
+        if (!doc) { resolve(false); return; }
+        L.Packer.toBlob(doc).then(function (blob) {
+          try { _downloadDocxBlob(blob, filename); resolve(true); }
+          catch (e) { console.error('[exportNativeDocx] download error:', e); resolve(false); }
+        }).catch(function (e) { console.error('[exportNativeDocx] pack error:', e); resolve(false); });
+      } catch (e) { console.error('[exportNativeDocx] build error:', e); resolve(false); }
+    });
   });
 }
 
@@ -22405,7 +22667,14 @@ async function jcRunConversion(skipRefs) {
     '. Citation: ' + citeStyle.toUpperCase() + '.\n' +
     'Dramatically elevate scholarly quality. Strengthen novelty in every section. ' +
     'Use ONLY provided hexa-source references (CrossRef+DOAJ+EuropePMC+OpenAlex+🟠ScopusFilter+SemanticScholar) — ' +
-    'NEVER fabricate hallucinated citations. Never truncate. Minimum word targets are floors.';
+    'NEVER fabricate hallucinated citations. Never truncate. Minimum word targets are floors.\n' +
+    'VISUAL AKADEMIK: Bila suatu bagian bersifat struktural/komparatif/prosedural/relasional, sisipkan ' +
+    'visual ilmiah yang benar-benar relevan — tabel Markdown (didahului caption tebal "**Tabel N.** …") ' +
+    'atau diagram/kerangka teoretik/flowchart dalam blок kode berbahasa "mermaid" (didahului caption ' +
+    '"**Gambar N.** …"; pakai flowchart TD/LR, graph TD, atau sequenceDiagram; label node singkat ≤6 kata, ' +
+    'bungkus label berspasi dengan tanda kutip, hindari tanda kurung/; di dalam label). Setiap visual WAJIB ' +
+    'dirujuk & ditafsirkan dalam prosa. Jangan berlebihan: umumnya 0–1 visual per bagian utama, hanya bila ' +
+    'benar-benar memperjelas. Nomori berurutan (Tabel 1,2…; Gambar 1,2…). Semua teks visual dalam ' + langName + '.';
 
   var jcSegInst = {
     title_abstract:
@@ -22606,6 +22875,8 @@ async function jcRunConversion(skipRefs) {
       (noveltyPct >= 85 ? 'Excellent ✓' : noveltyPct >= 70 ? 'Good' : 'Fair');
   }, 300);
   document.getElementById('jcFinalArea').innerHTML = marked.parse(jcFinalOutput);
+  // FIX v13.5 — render diagram/tabel akademik pada hasil konversi jurnal.
+  try { _renderAcademicVisuals('jcFinalArea'); } catch (_jv) { console.warn('[jc visual] non-fatal:', _jv.message); }
   document.getElementById('jcFinalWC').textContent = totalWC.toLocaleString() + ' kata';
 
   totalWords += totalWC; sessionCount++;
