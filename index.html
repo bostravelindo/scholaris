@@ -3538,6 +3538,9 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
                 <option value="15">15 referensi</option>
                 <option value="20">20 referensi</option>
                 <option value="30">30 referensi</option>
+                <option value="50">50 referensi</option>
+                <option value="75">75 referensi</option>
+                <option value="100">100 referensi</option>
               </select>
             </div>
             <div>
@@ -4138,6 +4141,8 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
                 <option value="20" selected>20</option>
                 <option value="30">30</option>
                 <option value="50">50</option>
+                <option value="75">75</option>
+                <option value="100">100</option>
               </select>
             </div>
           </div>
@@ -9246,6 +9251,14 @@ function scoreConceptualRelevance_(ref, expansion) {
  * FASE 1 UTAMA: Auto-harvest referensi dari 6 sumber paralel (Hexa-Source).
  * CrossRef + Semantic Scholar + OpenAlex → pool terverifikasi.
  */
+// FIX v13.2 — baca "Jumlah Referensi" pilihan pengguna (5–100) untuk grounding.
+function _desiredRefCount_(fallback) {
+  var el = document.getElementById('refCount');
+  var n = el ? parseInt(el.value, 10) : NaN;
+  if (isNaN(n) || n <= 0) n = fallback || 20;
+  return Math.max(5, Math.min(100, n));   // batas atas 100
+}
+
 async function autoHarvestRefs_(title, instructions, lang, yearFrom, yearTo, targetCount) {
   targetCount = targetCount || 20;
   var el  = document.getElementById('autorefBar');
@@ -9755,10 +9768,14 @@ function renderValidationReport_(refs, text) {
 async function autoRefAndGenerate_(mode, model, lang, cite, temp, title, instructions) {
   const yearFrom = document.getElementById('refYearFrom') ? document.getElementById('refYearFrom').value : '2019';
   const yearTo   = document.getElementById('refYearTo')   ? document.getElementById('refYearTo').value   : '2026';
-  
+
+  // FIX v13.2 — grounding otomatis memakai JUMLAH REFERENSI pilihan pengguna
+  // (kolom "Jumlah Referensi CrossRef", kini hingga 100). Hasil harvest sudah
+  // terurut prioritas: relevansi (rerankByTopic) → Scopus/Q1-Q2 → sitasi.
+  const _desired = _desiredRefCount_(30);
   // Auto-harvest dari 6 sumber (Hexa-Source)
   setStatus('🔍 Fase 1: Hexa-Source Harvest — CrossRef + DOAJ + Europe PMC + OpenAlex + 🟠Scopus + Semantic Scholar...');
-  const refs = await autoHarvestRefs_(title, instructions, lang, yearFrom, yearTo, 30);
+  const refs = await autoHarvestRefs_(title, instructions, lang, yearFrom, yearTo, _desired);
   
   validatedRefPool = refs;  // Simpan ke global pool
   
