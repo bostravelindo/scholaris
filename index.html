@@ -8323,16 +8323,29 @@ function topicRelevanceScore(ref, topic, expansion) {
     if (ctPresent === topic.coreTerms.length && topic.coreTerms.length >= 2) score += 3;
   }
 
-  // (3) Ekspansi konseptual multibahasa (sinonim id/en/ar) — penguat.
+  // (3) Ekspansi konseptual multibahasa (sinonim id/en/ar) — PENGUAT UTAMA untuk
+  // referensi berbahasa asing. FIX v13.3: bobot dinaikkan & disetarakan dengan
+  // subjek inti agar paper Inggris/Arab yang membahas KONSEP yang sama (mis.
+  // "ecotheology", "اللاهوت البيئي") tidak tersingkir hanya karena tak memuat
+  // kata Indonesia literalnya. Kecocokan di JUDUL diberi bobot lebih besar.
   if (expansion && expansion.all && expansion.all.length) {
     var matchedLangs = {};
+    var _concHit = 0;
     ['id', 'en', 'ar'].forEach(function (L) {
       (expansion[L] || []).forEach(function (term) {
         var t = _normTopic(term);
-        if (t.length >= 3 && hay.indexOf(t) !== -1) { score += 0.75; matchedLangs[L] = true; }
+        if (t.length >= 3 && hay.indexOf(t) !== -1) {
+          // Judul jauh lebih menentukan daripada abstrak/jurnal.
+          var w = (title.indexOf(t) !== -1) ? 3.5 : 1.2;
+          score += w; matchedLangs[L] = true; _concHit += 1;
+          if (title.indexOf(t) !== -1) hasCore = true;   // konsep di judul = on-topic
+        }
       });
     });
-    if (Object.keys(matchedLangs).length > 1) score += 1;
+    var _lc = Object.keys(matchedLangs).length;
+    if (_lc > 1) score += (_lc - 1) * 1.0;   // bonus lintas-bahasa (konsep sama, banyak bahasa)
+    // Jika judul asing memuat ≥2 istilah konsep, jelas relevan meski tanpa kata ID.
+    if (_concHit >= 2) score += 1.5;
   }
 
   // (4) Penalti: hanya mencocokkan kata lensa (tanpa subjek inti) → kemungkinan
@@ -9223,6 +9236,46 @@ async function expandConceptualQuery_(query, lang) {
   return basic;
 }
 
+// FIX v13.3 — PEMILIH ISTILAH LINTAS-BAHASA SEIMBANG. Dari hasil ekspansi
+// konseptual (id/en/ar), pilih istilah tambahan untuk kueri pencarian dengan
+// MENDAHULUKAN bahasa asing (EN lalu AR) agar harvest menjangkau literatur
+// internasional — bukan hanya Bahasa Indonesia. Query asli tetap dijalankan
+// terpisah, jadi di sini kita fokus menambah jangkauan lintas-bahasa.
+function _pickMultilingualTerms_(expansion, origQuery, maxTerms) {
+  maxTerms = maxTerms || 5;
+  if (!expansion) return [];
+  var origKey = _normalizeQueryKey_(origQuery);
+  var _origLang = (typeof _detectQueryLang_ === 'function') ? _detectQueryLang_(origQuery) : 'id';
+
+  function clean(list) {
+    return (list || [])
+      .map(function (t) { return (t || '').trim(); })
+      .filter(function (t) { return t.length >= 3 && _normalizeQueryKey_(t) !== origKey; });
+  }
+  var en = clean(expansion.en), ar = clean(expansion.ar), id = clean(expansion.id);
+
+  // Urutan prioritas bahasa: dahulukan yang BUKAN bahasa input agar menambah
+  // jangkauan asing; bahasa input ditaruh belakangan (query asli sudah mewakilinya).
+  var order;
+  if (_origLang === 'en')      order = [ar, id, en];
+  else if (_origLang === 'ar') order = [en, id, ar];
+  else                         order = [en, ar, id];   // input ID → dahulukan EN, lalu AR
+
+  // Round-robin lintas-bahasa agar seimbang (mis. EN, AR, ID, EN, AR, ...).
+  var picked = [], seen = {}, idx = 0, guard = 0;
+  while (picked.length < maxTerms && guard < 60) {
+    var bucket = order[idx % order.length];
+    var pos = Math.floor(idx / order.length);
+    if (bucket && bucket[pos]) {
+      var term = bucket[pos];
+      var k = _normalizeQueryKey_(term);
+      if (!seen[k]) { seen[k] = true; picked.push(term); }
+    }
+    idx++; guard++;
+  }
+  return picked;
+}
+
 /**
  * Skor relevansi KONSEPTUAL sebuah referensi (title+abstract+journal)
  * terhadap himpunan istilah hasil ekspansi. Skor lebih tinggi bila cocok
@@ -9282,7 +9335,12 @@ async function autoHarvestRefs_(title, instructions, lang, yearFrom, yearTo, tar
   try {
     _concept = await expandConceptualQuery_(title, lang);
     if (_concept && _concept.all && _concept.all.length) {
-      var _extra = _concept.all.filter(function(t) { return queries.indexOf(t) === -1; }).slice(0, 3);
+      // FIX v13.3 — pilih istilah tambahan SEIMBANG lintas-bahasa (EN/AR/ID),
+      // mendahulukan bahasa asing, agar auto-harvest AI Writer juga menjangkau
+      // literatur internasional — bukan hanya Bahasa Indonesia.
+      var _extra = (typeof _pickMultilingualTerms_ === 'function')
+        ? _pickMultilingualTerms_(_concept, title, 4).filter(function (t) { return queries.indexOf(t) === -1; })
+        : _concept.all.filter(function (t) { return queries.indexOf(t) === -1; }).slice(0, 3);
       queries = queries.concat(_extra);
     }
   } catch (_ce) { console.warn('[autoHarvestRefs_] Ekspansi konsep dilewati (non-fatal):', _ce.message); }
@@ -15036,21 +15094,21 @@ async function searchReferences() {
   let _rfExpansion = null, _rfExtraTerms = [];
   const rfExpInfoEl = document.getElementById('rfExpansionInfo');
   if (smartQueryOn) {
-    if (rfExpInfoEl) rfExpInfoEl.textContent = '🧠 Menganalisis konsep multi-bahasa...';
+    if (rfExpInfoEl) rfExpInfoEl.textContent = '🧠 Menganalisis konsep multi-bahasa (ID · EN · AR)...';
     try {
       _rfExpansion = await expandConceptualQuery_(query);
-      if (_rfExpansion && _rfExpansion.all && _rfExpansion.all.length) {
-        _rfExtraTerms = _rfExpansion.all
-          .filter(function(t) { return _normalizeQueryKey_(t) !== _normalizeQueryKey_(query); })
-          .slice(0, 2); // dibatasi 2 istilah tambahan agar tidak membebani rate-limit sumber
-      }
+      // FIX v13.3 — JAMIN cakupan LINTAS-BAHASA. Sebelumnya hanya 2 istilah teratas
+      // dari .all (didominasi Bahasa Indonesia) yang dipakai → hasil nyaris selalu
+      // berbahasa Indonesia. Kini kita ambil istilah SECARA SEIMBANG dari en/ar/id
+      // agar kueri benar-benar menjangkau literatur asing (Inggris/Arab).
+      _rfExtraTerms = _pickMultilingualTerms_(_rfExpansion, query, 5);
     } catch (_qe) {
       console.warn('[searchReferences] Ekspansi kueri konseptual dilewati (non-fatal):', _qe.message);
     }
   }
   if (rfExpInfoEl) {
     rfExpInfoEl.textContent = _rfExtraTerms.length
-      ? ('🧠 Kueri diperluas secara konseptual ke: ' + _rfExtraTerms.join(' · '))
+      ? ('🧠 Kueri diperluas lintas-bahasa ke: ' + _rfExtraTerms.join(' · '))
       : '';
   }
 
