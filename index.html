@@ -3683,6 +3683,12 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
             <button class="btn btn-sm btn-export-docx" onclick="exportDOCX()" title="Export ke Microsoft Word (.docx)">📄 Export DOCX</button>
             <button class="btn btn-sm btn-export-pdf"  onclick="exportPDF()"  title="Export ke PDF">📕 PDF</button>
             <button class="btn btn-sm btn-secondary"   onclick="saveToHistory()" title="Simpan ke Riwayat Dokumen">💾 Simpan</button>
+            <span style="width:1px;height:18px;background:var(--border);margin:0 2px;"></span>
+            <button class="btn btn-sm btn-secondary" id="btnMainEditToggle" onclick="toggleMainEditMode()" title="Edit naskah langsung di tempat">✏️ Edit Naskah</button>
+            <button class="btn btn-sm btn-secondary" id="btnMainRegenSel" onclick="regenerateMainSelection()" style="display:none;" title="Regenerasi hanya bagian teks yang diblok/dipilih">🔄 Regenerasi Bagian Terpilih</button>
+            <button class="btn btn-sm btn-secondary" onclick="regenerateMainWhole()" title="Generate ulang seluruh naskah dari awal dengan parameter yang sama">🔁 Regenerasi Total</button>
+            <button class="btn btn-sm btn-secondary" onclick="document.getElementById('mainEditUploadInput').click()" title="Unggah dokumen luar (.docx/.doc/.pdf/.txt/.md) untuk diedit/diregenerasi di sini">📤 Unggah untuk Diedit</button>
+            <input type="file" id="mainEditUploadInput" accept=".docx,.doc,.pdf,.txt,.md,.markdown" style="display:none;" onchange="handleEditUpload(this,'main')">
             <button class="btn btn-sm" id="citDocBtn"
               style="background:linear-gradient(135deg,#1565c0,#1976d2);color:#fff;border:none;display:none;"
               onclick="runCitationDoctor()">
@@ -4105,6 +4111,11 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
                     <button class="btn-bca" type="button" onclick="saveCurrentChapterSnippet()" title="Simpan bab ini ke Riwayat">
                       💾 Simpan
                     </button>
+                    <span class="spacer"></span>
+                    <button class="btn-bca" type="button" id="btnChapEditToggle" onclick="toggleChapterEditMode()" title="Edit isi bab langsung di tempat">✏️ Edit Bab</button>
+                    <button class="btn-bca" type="button" id="btnChapRegenSel" onclick="regenerateChapterSelection()" style="display:none;" title="Regenerasi hanya bagian teks yang diblok/dipilih">🔄 Bagian Terpilih</button>
+                    <button class="btn-bca" type="button" onclick="document.getElementById('chapEditUploadInput').click()" title="Unggah dokumen luar untuk mengisi/mengganti bab ini agar bisa diedit/diregenerasi">📤 Unggah</button>
+                    <input type="file" id="chapEditUploadInput" accept=".docx,.doc,.pdf,.txt,.md,.markdown" style="display:none;" onchange="handleEditUpload(this,'chapter')">
                   </div>
                   <div class="book-output-view" id="bookChapterPreview" style="overflow-y:auto;flex:1;padding:20px 24px;"></div>
                 </div>
@@ -18225,6 +18236,9 @@ async function _renderAcademicVisuals(areaId) {
 }
 
 function displayOutput(md, areaId, cardId) {
+  // FIX — bersihkan kebocoran markdown (code-fence yatim, bold tak tertutup)
+  // di SEMUA jalur generasi yang bermuara ke sini, sebelum dirender.
+  if (typeof stripMarkdownLeakage === 'function') md = stripMarkdownLeakage(md);
   // Auto AI Score on main output
   if (areaId === 'outputArea' && md && md.trim().length > 100) {
     const sc = computeAIScore_(md);
@@ -21390,6 +21404,8 @@ async function sendBookChapter() {
     var _bookEnriched = await runGrokGroundingSegment(_bookRaw, _bookTitle, _bookLang, _bookCite2, ch.title);
     // FITUR v10.8: konsistensi gaya sitasi (anti gaya-ganda) per bab.
     try { _bookEnriched = enforceCitationStyle(_bookEnriched, _bookCite2); } catch (_ce) {}
+    // FIX — bersihkan kebocoran markdown (code-fence yatim, bold tak tertutup) pada hasil generate bab
+    try { _bookEnriched = stripMarkdownLeakage(_bookEnriched); } catch (_sm) {}
 
     ch.content    = _bookEnriched;
     ch.wc         = countWords(_bookEnriched);
@@ -22151,7 +22167,279 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 
-function countWords(str) { return str.trim().split(/\s+/).filter(Boolean).length; }
+// ════════════════════════════════════════════════════════════════════
+// EDIT & REGENERATE STUDIO — Edit di tempat + Regenerasi Bertarget (v1)
+// ────────────────────────────────────────────────────────────────────
+// Fitur ini memungkinkan naskah yang SEDANG diproses atau SUDAH selesai
+// (baik hasil AI Writer, bab Book Mode, maupun dokumen luar yang diunggah)
+// untuk diedit langsung, atau diregenerasi ulang secara: (a) keseluruhan,
+// (b) per-bab, atau (c) per-bagian/paragraf terpilih — tanpa mengulang
+// seluruh proses generate dari nol.
+//
+// Prinsip keandalan: SEMUA regenerasi (apa pun cakupannya) melewati
+// _condenseGenerateComplete() — mesin generasi yang sama yang sudah
+// dilengkapi retry-with-backoff untuk error transien, deteksi & perbaikan
+// truncation (potong tengah kalimat/kata), regenerasi-dari-sumber saat
+// hasil terlalu pendek, dan jaring pengaman akhir yang menjamin naskah
+// selalu berakhir bersih — sehingga tidak ada kata/kalimat/paragraf yang
+// putus/menggantung, konsisten di semua titik regenerasi.
+// ════════════════════════════════════════════════════════════════════
+
+function _regenLangName(lang) {
+  return { id: 'Bahasa Indonesia', en: 'English', ar: 'Arabic (العربية)' }[lang] || 'Bahasa Indonesia';
+}
+
+// Bersihkan kebocoran markdown yang tidak sengaja terbawa dari output AI:
+// code-fence yatim (```), bold/italic yang tidak tertutup, dan spasi ganda
+// akibat penghapusan tag. Diterapkan di SETIAP titik regenerasi & pada
+// hasil generate utama, agar tampilan naskah selalu rapi tanpa kebocoran.
+function stripMarkdownLeakage(text) {
+  if (!text) return text;
+  var t = text;
+  // Buang code-fence yatim (```markdown, ```text, atau ``` polos di awal/akhir blok)
+  t = t.replace(/^\s*```[a-zA-Z]*\s*\n/gm, '').replace(/\n\s*```\s*$/gm, '');
+  // Rapikan bold (**) yang jumlahnya ganjil per baris (tidak tertutup)
+  t = t.split('\n').map(function (line) {
+    var boldCount = (line.match(/\*\*/g) || []).length;
+    if (boldCount % 2 !== 0) {
+      var lastIdx = line.lastIndexOf('**');
+      if (lastIdx !== -1) line = line.slice(0, lastIdx) + line.slice(lastIdx + 2);
+    }
+    return line;
+  }).join('\n');
+  // Rapikan sisa spasi ganda/baris kosong berlebih akibat pembersihan di atas
+  t = t.replace(/[ \t]+\n/g, '\n').replace(/\n{4,}/g, '\n\n\n');
+  return t.trim();
+}
+
+// ── Regenerasi bagian/paragraf terpilih ────────────────────────────────
+// fullText   : seluruh naskah (markdown mentah) tempat bagian ini berada
+// selStart/selEnd : offset karakter bagian yang dipilih user (dari textarea
+//                   native selectionStart/selectionEnd — presisi & andal,
+//                   tidak bergantung pemetaan DOM-selection yang rapuh)
+// extraInstruction: instruksi tambahan opsional dari user (mis. "buat lebih
+//                   ringkas", "perkuat argumen dengan data terbaru", dst.)
+// Mengembalikan STRING NASKAH LENGKAP baru (fullText dengan bagian terpilih
+// sudah diganti hasil regenerasi), siap langsung dipakai sebagai pengganti.
+async function regenerateTextPortion(fullText, selStart, selEnd, extraInstruction, model, lang) {
+  if (selStart >= selEnd) throw new Error('Tidak ada bagian teks yang dipilih untuk diregenerasi.');
+  var before   = fullText.slice(0, selStart);
+  var selected = fullText.slice(selStart, selEnd);
+  var after    = fullText.slice(selEnd);
+  var langName = _regenLangName(lang);
+
+  var contextBefore = before.slice(-700);
+  var contextAfter  = after.slice(0, 500);
+  var selWords = countWords(selected);
+  var targetWords = Math.max(10, selWords); // pertahankan panjang yang sepadan kecuali diminta lain
+
+  var sys = 'You are an elite academic editor. Your task: REGENERATE/REWRITE only the SELECTED PORTION of an ' +
+    'academic manuscript in ' + langName + ', so it integrates seamlessly with the surrounding context that stays ' +
+    'UNCHANGED. HARD REQUIREMENTS: ' +
+    '(1) Match the exact writing style, register, terminology, and citation format used in the surrounding context; ' +
+    '(2) The output must connect coherently with the text immediately BEFORE and AFTER it — same tense, same ' +
+    'argumentative thread, no abrupt topic jump; ' +
+    '(3) Output length should be approximately ' + targetWords + ' words unless the additional instruction says ' +
+    'otherwise; ' +
+    '(4) The output MUST start and end with COMPLETE sentences — never begin or end mid-word/mid-sentence/mid-clause; ' +
+    '(5) Do NOT repeat the "context before/after" text — output ONLY the replacement for the selected portion; ' +
+    '(6) Do NOT add markdown code fences, headings, or labels unless the selected portion itself was a heading; ' +
+    '(7) Preserve any citations present in the selection unless the additional instruction explicitly asks to change them. ' +
+    (extraInstruction ? 'ADDITIONAL INSTRUCTION FROM USER (follow this carefully): ' + extraInstruction + '. ' : '') +
+    'Output ONLY the rewritten replacement text, no explanations, no preamble, no quotation marks wrapping it.';
+
+  var userMsg =
+    '=== KONTEKS SEBELUM (JANGAN diulang, hanya untuk kesinambungan) ===\n' + (contextBefore || '(awal naskah)') + '\n\n' +
+    '=== BAGIAN YANG AKAN DIREGENERASI ===\n' + selected + '\n\n' +
+    '=== KONTEKS SESUDAH (JANGAN diulang, hanya untuk kesinambungan) ===\n' + (contextAfter || '(akhir naskah)');
+
+  var newPortion = await _condenseGenerateComplete(userMsg, targetWords, sys, model, 0.5, lang);
+  newPortion = stripMarkdownLeakage(newPortion).trim();
+
+  // Jahitan yang aman: pastikan tidak ada penggabungan kata tanpa spasi di kedua sisi
+  var sepBefore = before && !/[\s\n]$/.test(before) && !/^[\s\n]/.test(newPortion) ? ' ' : '';
+  var sepAfter  = after  && !/^[\s\n]/.test(after)  && !/[\s\n]$/.test(newPortion) ? ' ' : '';
+
+  return before + sepBefore + newPortion + sepAfter + after;
+}
+
+// ── EDIT MODE — Naskah Utama (AI Writer) ───────────────────────────────
+var _mainEditMode = false;
+function toggleMainEditMode() {
+  var area = document.getElementById('outputArea');
+  var btn  = document.getElementById('btnMainEditToggle');
+  var selBtn = document.getElementById('btnMainRegenSel');
+  if (!area) return;
+
+  if (!_mainEditMode) {
+    var raw = (typeof lastOutput === 'string' && lastOutput) ? lastOutput : '';
+    area.innerHTML = '';
+    var ta = document.createElement('textarea');
+    ta.id = 'outputEditArea';
+    ta.value = raw;
+    ta.style.cssText = 'width:100%;min-height:420px;font-family:"Times New Roman",serif;font-size:1rem;' +
+      'line-height:1.6;padding:14px;border:1px solid var(--border);border-radius:8px;background:var(--bg2);' +
+      'color:var(--text1);resize:vertical;';
+    area.appendChild(ta);
+    _mainEditMode = true;
+    if (btn) btn.textContent = '✅ Selesai Edit';
+    if (selBtn) selBtn.style.display = '';
+    toast('✏️ Mode edit aktif — blok bagian teks lalu klik "Regenerasi Bagian Terpilih", atau edit manual langsung.', 5000);
+  } else {
+    var ta2 = document.getElementById('outputEditArea');
+    if (ta2) lastOutput = stripMarkdownLeakage(ta2.value);
+    _mainEditMode = false;
+    if (btn) btn.textContent = '✏️ Edit Naskah';
+    if (selBtn) selBtn.style.display = 'none';
+    displayOutput(lastOutput, 'outputArea', 'outputCard');
+    try { if (typeof updateStats === 'function') updateStats(lastOutput, document.getElementById('aiModel') ? document.getElementById('aiModel').value : ''); } catch (_u) {}
+    toast('✅ Perubahan tersimpan.', 2500);
+  }
+}
+
+async function regenerateMainSelection() {
+  var ta = document.getElementById('outputEditArea');
+  if (!ta) return toast('Aktifkan mode edit terlebih dahulu.');
+  var s = ta.selectionStart, e = ta.selectionEnd;
+  if (s === e) return toast('⚠️ Blok/pilih dulu bagian teks yang ingin diregenerasi di dalam kotak edit.', 4000);
+
+  var extra = prompt('Instruksi tambahan untuk bagian ini (opsional, kosongkan jika hanya ingin ditulis ulang dengan gaya yang sama):', '');
+  if (extra === null) return;
+
+  var model = document.getElementById('aiModel') ? document.getElementById('aiModel').value : 'anthropic/claude-sonnet-4-6';
+  var effModel = (model === 'dual_gemini_claude' || model === 'dual_o4_gpt') ? (MODEL_FALLBACK[model] || model) : model;
+  var lang = document.getElementById('writeLang') ? document.getElementById('writeLang').value : 'id';
+
+  toast('🤖 Meregenerasi bagian terpilih...', 3000);
+  try {
+    var updated = await regenerateTextPortion(ta.value, s, e, extra, effModel, lang);
+    ta.value = updated;
+    lastOutput = updated;
+    toast('✅ Bagian terpilih berhasil diregenerasi.', 3000);
+  } catch (err) {
+    toast('❌ Gagal meregenerasi: ' + err.message, 5000);
+  }
+}
+
+function regenerateMainWhole() {
+  if (typeof lastOutput === 'string' && lastOutput.trim()) {
+    if (!confirm('Naskah saat ini akan DIGANTI TOTAL dengan hasil generate baru. Perubahan manual yang belum disimpan/diekspor akan hilang.\n\nLanjutkan regenerasi total?')) return;
+  }
+  if (_mainEditMode) toggleMainEditMode();
+  generateWriting();
+}
+
+// ── EDIT MODE — Bab Book Mode ───────────────────────────────────────────
+var _chapEditMode = false;
+function toggleChapterEditMode() {
+  if (activeChapterIdx < 0 || !bookProject) return toast('Pilih bab terlebih dahulu.');
+  var area = document.getElementById('bookChapterPreview');
+  var btn  = document.getElementById('btnChapEditToggle');
+  var selBtn = document.getElementById('btnChapRegenSel');
+  if (!area) return;
+  var ch = bookProject.chapters[activeChapterIdx];
+
+  if (!_chapEditMode) {
+    var raw = ch.content || '';
+    area.innerHTML = '';
+    var ta = document.createElement('textarea');
+    ta.id = 'chapEditArea';
+    ta.value = raw;
+    ta.style.cssText = 'width:100%;min-height:420px;font-family:"Times New Roman",serif;font-size:1rem;' +
+      'line-height:1.6;padding:14px;border:1px solid var(--border);border-radius:8px;background:var(--bg2);' +
+      'color:var(--text1);resize:vertical;';
+    area.appendChild(ta);
+    _chapEditMode = true;
+    if (btn) btn.textContent = '✅ Selesai Edit';
+    if (selBtn) selBtn.style.display = '';
+    toast('✏️ Mode edit bab aktif — blok bagian teks lalu klik "Bagian Terpilih", atau edit manual langsung.', 5000);
+  } else {
+    var ta2 = document.getElementById('chapEditArea');
+    if (ta2) {
+      ch.content = stripMarkdownLeakage(ta2.value);
+      ch.wc = countWords(ch.content);
+      ch.status = ch.content ? 'done' : 'pending';
+      try { saveBookProjectLocal(); } catch (_sb) {}
+      try { renderChapterNav(); } catch (_rn) {}
+      try { updateBookProgress(); } catch (_ub) {}
+    }
+    _chapEditMode = false;
+    if (btn) btn.textContent = '✏️ Edit Bab';
+    if (selBtn) selBtn.style.display = 'none';
+    area.innerHTML = marked.parse(ch.content || '');
+    toast('✅ Perubahan bab tersimpan.', 2500);
+  }
+}
+
+async function regenerateChapterSelection() {
+  if (activeChapterIdx < 0 || !bookProject) return;
+  var ta = document.getElementById('chapEditArea');
+  if (!ta) return toast('Aktifkan mode edit bab terlebih dahulu.');
+  var s = ta.selectionStart, e = ta.selectionEnd;
+  if (s === e) return toast('⚠️ Blok/pilih dulu bagian teks yang ingin diregenerasi di dalam kotak edit.', 4000);
+
+  var extra = prompt('Instruksi tambahan untuk bagian ini (opsional, kosongkan jika hanya ingin ditulis ulang dengan gaya yang sama):', '');
+  if (extra === null) return;
+
+  var model = document.getElementById('mtModel') ? document.getElementById('mtModel').value : 'anthropic/claude-sonnet-4-6';
+  var effModel = (model === 'dual_gemini_claude' || model === 'dual_o4_gpt') ? (MODEL_FALLBACK[model] || model) : model;
+  var lang = document.getElementById('mtLang') ? document.getElementById('mtLang').value : 'id';
+
+  toast('🤖 Meregenerasi bagian terpilih...', 3000);
+  try {
+    var updated = await regenerateTextPortion(ta.value, s, e, extra, effModel, lang);
+    ta.value = updated;
+    toast('✅ Bagian terpilih berhasil diregenerasi. Klik "Selesai Edit" untuk menyimpan ke bab.', 4000);
+  } catch (err) {
+    toast('❌ Gagal meregenerasi: ' + err.message, 5000);
+  }
+}
+
+// ── UNGGAH DOKUMEN LUAR UNTUK DIEDIT/DIREGENERASI ──────────────────────
+async function handleEditUpload(input, target) {
+  var files = Array.prototype.slice.call(input.files || []);
+  if (!files.length) return;
+  var f = files[0];
+  var ext = (f.name.split('.').pop() || '').toLowerCase();
+  toast('⏳ Membaca "' + f.name + '"...', 3000);
+  try {
+    var txt = '';
+    if (['txt', 'md', 'markdown'].indexOf(ext) >= 0) txt = await _readTextFile(f);
+    else if (ext === 'doc') txt = await _readDocFile(f);
+    else if (ext === 'docx') txt = await _readDocxFile(f);
+    else if (ext === 'pdf') txt = await _readPdfFile(f);
+    else txt = await _readTextFile(f);
+    txt = String(txt || '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    if (!txt) { toast('⚠️ File kosong atau tidak dapat dibaca.', 4000); return; }
+
+    if (target === 'main') {
+      lastOutput = txt;
+      if (!_mainEditMode) toggleMainEditMode();
+      var ta = document.getElementById('outputEditArea');
+      if (ta) ta.value = txt;
+      var card = document.getElementById('outputCard');
+      if (card) card.style.display = '';
+      toast('✅ "' + f.name + '" dimuat (' + countWords(txt).toLocaleString('id-ID') + ' kata) — siap diedit/diregenerasi.', 4000);
+    } else if (target === 'chapter') {
+      if (activeChapterIdx < 0 || !bookProject) return toast('Pilih bab terlebih dahulu.');
+      var ch = bookProject.chapters[activeChapterIdx];
+      ch.content = txt;
+      ch.wc = countWords(txt);
+      ch.status = 'done';
+      try { saveBookProjectLocal(); } catch (_sb2) {}
+      try { renderChapterNav(); } catch (_rn2) {}
+      try { updateBookProgress(); } catch (_ub2) {}
+      if (!_chapEditMode) toggleChapterEditMode();
+      var ta2 = document.getElementById('chapEditArea');
+      if (ta2) ta2.value = txt;
+      toast('✅ "' + f.name + '" dimuat ke Bab ' + ch.num + ' (' + countWords(txt).toLocaleString('id-ID') + ' kata) — siap diedit/diregenerasi.', 4000);
+    }
+  } catch (err) {
+    toast('❌ Gagal membaca file: ' + err.message, 5000);
+  } finally {
+    input.value = '';
+  }
+}
 function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function stripHtml(s) { return s.replace(/<[^>]*>/g, ''); }
 function copyToClipboard(text) {
