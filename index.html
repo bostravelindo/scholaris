@@ -19587,6 +19587,23 @@ function saveToHistory(exportType = null) {
   const wc     = countWords(lastOutput);
   const score  = computeAIScore_(lastOutput);
 
+  // FIX v19b — simpan juga rincian per-bagian (segments) bila tersedia & cocok dengan
+  // naskah yang sedang disimpan, agar saat dimuat ulang dari riwayat, fitur Edit &
+  // Regenerate per-bagian/paragraf mendapat batas bagian ASLI (bukan hasil pecah-ulang
+  // berdasarkan heading semata). Dicocokkan ketat agar tak menyimpan segmen dari naskah
+  // lain (mis. saat saveCurrentChapterSnippet menimpa lastOutput sementara).
+  let segmentsForHistory = null;
+  try {
+    if (window._scDoc && window._scDoc.sections && window._scDoc.sections.length) {
+      const flat = window._scDoc.sections.map(function (s) { return s.content; }).join('\n\n');
+      if (flat === lastOutput) {
+        segmentsForHistory = window._scDoc.sections.map(function (s) {
+          return { label: s.label, content: s.content, words: s.words };
+        });
+      }
+    }
+  } catch (_segErr) { /* non-fatal — fallback ke parseStructuredBlocks saat dimuat */ }
+
   const entry = {
     id        : Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     title,
@@ -19596,6 +19613,7 @@ function saveToHistory(exportType = null) {
     cite,
     instructions: instr,
     content   : lastOutput,
+    segments  : segmentsForHistory,
     snippet   : lastOutput.replace(/#+\s/g, '').trim().slice(0, 200),
     wordCount : wc,
     refCount  : validatedRefPool.length,
@@ -19667,6 +19685,18 @@ function loadFromHistory(id) {
   if (entry.aiScore !== undefined) {
     showAIScore_(entry.aiScore);
   }
+
+  // FIX v19b — inisialisasi ulang state Edit & Regenerate (_scDoc) untuk dokumen yang
+  // dimuat dari Riwayat. Tanpa ini, tombol "✏️ Edit & Regenerate" (dan menu regenerasi
+  // per-bab/bagian/paragraf di baliknya) tidak pernah muncul — hanya "🔁 Regenerate
+  // Semua" & "📤 Unggah untuk Diedit" yang selalu terlihat karena keduanya tak butuh
+  // _scDoc. Pakai segments tersimpan bila ada (fidelitas penuh); jika tidak (entri
+  // lama), _scInitDocFromResult otomatis memecah ulang berdasarkan heading Markdown.
+  try {
+    _scInitDocFromResult(entry.content, entry.segments || null, entry.mode, entry.model,
+      entry.lang, entry.cite, null, entry.title, entry.instructions, null);
+    if (window._scDoc) window._scDoc.meta.uploaded = false;
+  } catch (_scErr) { console.warn('[Edit&Regenerate init dari riwayat] non-fatal:', _scErr && _scErr.message); }
 
   // Navigasi ke AI Writer
   const writerNav = document.querySelector('[data-page="writer"]');
