@@ -123,6 +123,26 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
 }
 .output-area h1,.output-area h2,.output-area h3 { font-family: var(--font-display); margin: 16px 0 8px; }
 .output-area h1 { font-size: 1.3rem; }
+/* ══ FIX v19 — EDIT & REGENERATE UI ══ */
+.sc-edit-toolbar-note { font-size:.78rem; color:var(--text3); margin-bottom:14px; padding:8px 12px;
+  background:rgba(99,102,241,.08); border:1px solid rgba(99,102,241,.25); border-radius:8px; }
+.sc-section { border:1px solid var(--border); border-radius:10px; margin-bottom:16px; overflow:hidden; }
+.sc-section-bar { display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--surface2,rgba(255,255,255,.03));
+  border-bottom:1px solid var(--border); flex-wrap:wrap; }
+.sc-section-label { font-weight:700; font-size:.85rem; }
+.sc-section-words { font-size:.72rem; color:var(--text3); margin-left:auto; }
+.sc-section-body { padding:16px 18px; }
+.sc-para { position:relative; padding-left:2px; }
+.sc-para:hover { background:rgba(99,102,241,.05); border-radius:6px; }
+.sc-para-regen-btn { position:absolute; left:-2px; top:2px; transform:translateX(-100%);
+  background:var(--surface); border:1px solid var(--border); border-radius:6px; font-size:.75rem;
+  padding:2px 5px; cursor:pointer; opacity:0; transition:opacity .15s; }
+.sc-para:hover .sc-para-regen-btn { opacity:1; }
+.sc-para-loading { color:var(--text3); font-style:italic; font-size:.85rem; }
+.sc-edit-textarea { width:100%; min-height:160px; font-family:inherit; font-size:.88rem; line-height:1.6;
+  padding:10px; border:1px solid var(--border); border-radius:8px; background:var(--bg); color:inherit;
+  resize:vertical; box-sizing:border-box; }
+.sc-edit-actions { display:flex; gap:8px; margin-top:8px; }
 /* ══ FIX v13.5 — VISUAL AKADEMIK: tabel & gambar (diagram/kerangka/flowchart) ══
    Gaya elegan, profesional, konsisten dengan kaidah penulisan ilmiah. */
 .output-area table, .aa-msg-bubble table, .jc-output table {
@@ -3679,6 +3699,12 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
             <span class="card-title" style="margin:0;">Hasil Penulisan</span>
             <span class="spacer"></span>
             <span class="word-count" id="wordCount"></span>
+            <button class="btn btn-sm btn-secondary" id="scEditModeBtn" style="display:none;" onclick="scToggleEditMode()">✏️ Edit &amp; Regenerate</button>
+            <button class="btn btn-sm btn-secondary" onclick="scRegenerateAll()" title="Regenerasi ulang seluruh naskah dari awal">🔁 Regenerate Semua</button>
+            <label class="btn btn-sm btn-secondary" style="cursor:pointer;margin-bottom:0;" title="Unggah naskah luar (.docx/.doc/.pdf/.txt/.md) untuk diedit &amp; diregenerasi">
+              📤 Unggah untuk Diedit
+              <input type="file" accept=".txt,.md,.markdown,.doc,.docx,.pdf,.html,.htm" style="display:none;" onchange="scUploadDocToEdit(this)">
+            </label>
             <button class="btn btn-sm btn-secondary" onclick="copyOutput()">📋 Salin</button>
             <button class="btn btn-sm btn-export-docx" onclick="exportDOCX()" title="Export ke Microsoft Word (.docx)">📄 Export DOCX</button>
             <button class="btn btn-sm btn-export-pdf"  onclick="exportPDF()"  title="Export ke PDF">📕 PDF</button>
@@ -10740,6 +10766,414 @@ function _headingToMarkdown(level, text) {
 }
 
 // ════════════════════════════════════════════════════════════════════
+// FIX v19 — EDIT & REGENERATE NASKAH (per-dokumen, per-bab/bagian, per-
+// paragraf) + UNGGAH NASKAH LUAR UNTUK DIEDIT
+// ────────────────────────────────────────────────────────────────────
+// Menyediakan fasilitas edit-di-tempat dan regenerasi bertarget pada
+// naskah yang sedang/sudah selesai digenerate, ATAU pada naskah yang
+// diunggah dari luar sistem. Memakai KEMBALI seluruh utilitas kualitas
+// yang sudah teruji di pipeline Kondensasi (detectTruncation, continuation
+// anti-kata-pecah, deduplikasi presisi, jaring pengaman kalimat) agar
+// setiap regenerasi — sekecil apapun cakupannya — tetap andal, tidak
+// terpotong, tidak bocor markdown, tidak duplikat heading, dan koheren
+// dengan konteks sekitarnya.
+// ════════════════════════════════════════════════════════════════════
+
+var SC_REGEN_MODEL_FOR = function (explicit) {
+  // Regenerasi bagian/paragraf memakai model tunggal yang valid (bukan
+  // 'dual_*' yang perlu orkestrasi 2 model) — default ke fallback yang aman.
+  if (!explicit || explicit === 'dual_gemini_claude') return 'google/gemini-2.5-pro-preview';
+  if (explicit === 'dual_o4_gpt') return 'openai/o4-mini-high';
+  return explicit;
+};
+
+// Bersihkan hasil AI dari kebocoran umum: preamble meta-commentary di baris
+// pertama ("Berikut adalah versi revisi:", "Here is the rewritten section:"),
+// pagar kode ``` yang tidak sengaja membungkus seluruh output, dan heading
+// yang DIDUPLIKASI (model kadang menuliskan ulang heading section padahal
+// UI sudah menampilkannya terpisah).
+function _scCleanRegenText(raw, sectionLabel) {
+  var t = String(raw || '').trim();
+  // Buang pagar kode pembungkus jika seluruh output dibungkus ```...```
+  var fence = t.match(/^```[a-zA-Z]*\n([\s\S]*)\n```$/);
+  if (fence) t = fence[1].trim();
+  // Buang baris preamble meta-commentary di awal (baris pendek, bukan heading,
+  // biasanya diakhiri titik dua atau berupa sapaan/pengantar).
+  var lines = t.split('\n');
+  while (lines.length && /^(berikut|here is|here's|tentu|sure|okay|baik,|revised|catatan:|note:)/i.test(lines[0].trim()) && lines[0].trim().length < 140 && !/^#{1,3}\s/.test(lines[0])) {
+    lines.shift();
+    while (lines.length && !lines[0].trim()) lines.shift();
+  }
+  t = lines.join('\n').trim();
+  // Buang duplikasi heading section di baris pertama jika cocok dengan label
+  // yang SUDAH ditampilkan terpisah oleh UI (case-insensitive, longgar spasi).
+  if (sectionLabel) {
+    var normLabel = sectionLabel.replace(/\s+/g, ' ').trim().toLowerCase();
+    var firstLine = (t.split('\n')[0] || '').replace(/^#{1,4}\s*/, '').replace(/\s+/g, ' ').trim().toLowerCase();
+    if (firstLine && (firstLine === normLabel || normLabel.indexOf(firstLine) === 0 || firstLine.indexOf(normLabel) === 0)) {
+      var rest = t.split('\n').slice(1).join('\n');
+      t = rest.replace(/^\s+/, '');
+    }
+  }
+  return t.trim();
+}
+
+// Generate-hingga-tuntas untuk regenerasi section/paragraf — pola yang sama
+// persis dengan _condenseGenerateComplete (continuation anti-kata-pecah,
+// deduplikasi presisi, jaring pengaman kalimat), diringkas untuk unit yang
+// lebih kecil (maks 2 ronde continuation cukup untuk section/paragraf).
+async function _scCompleteGeneration(userPrompt, systemPrompt, model, temperature, targetWords, sectionLabel) {
+  var fallbackModel = MODEL_FALLBACK[model] || model;
+  var maxTok = clampMaxTokens(model, MODEL_TOKENS[model] || 8000);
+  var result = await callGASWithRetry({
+    action: 'ai_write', model: model, system: systemPrompt,
+    messages: [{ role: 'user', content: userPrompt }],
+    temperature: temperature, max_tokens: maxTok
+  }, 320000, fallbackModel);
+
+  if (!result || !result.success) {
+    throw new Error(result ? (result.error || 'API error') : 'Tidak ada respons dari server');
+  }
+  var content = _scCleanRegenText(result.content || '', sectionLabel);
+  if (!content) throw new Error('Server AI tidak menghasilkan teks. Coba model lain.');
+
+  var rounds = 0, MAX_ROUNDS = 2;
+  while (rounds < MAX_ROUNDS) {
+    var trunc;
+    try { trunc = detectTruncation(content, targetWords); } catch (_e) { trunc = { truncated: false }; }
+    if (!trunc.truncated) break;
+    rounds++;
+    content = trimTrailingPartialWord(content);
+    try {
+      var tail = content.slice(-1200);
+      var contPrompt = 'Ini lanjutan dari teks akademik yang TERPOTONG. Lanjutkan PERSIS dari titik berhenti — ' +
+        'JANGAN mengulang konten yang sudah ada, JANGAN tambah heading baru.\n\n' +
+        '------ AKHIR TEKS ------\n' + tail + '\n------ LANJUTKAN DARI SINI ------\n\n' +
+        'Mulai dengan kata baru, selesaikan hingga tuntas & koheren, akhiri dengan kalimat lengkap. ' +
+        'Output HANYA teks lanjutannya.';
+      var contResult = await callGASWithRetry({
+        action: 'ai_write', model: model, system: systemPrompt,
+        messages: [{ role: 'user', content: contPrompt }],
+        temperature: temperature, max_tokens: clampMaxTokens(model, 4000)
+      }, 320000, fallbackModel);
+      if (!contResult || !contResult.success || !contResult.content) break;
+      var contText = stripOverlap(tail, _scCleanRegenText(contResult.content, null));
+      if (!contText) break;
+      content = content + ' ' + contText;
+    } catch (_ce) { break; }
+  }
+
+  var finalCheck;
+  try { finalCheck = detectTruncation(content, targetWords); } catch (_e) { finalCheck = { truncated: false }; }
+  if (finalCheck.truncated) content = trimToLastCompleteSentence(content);
+  return content;
+}
+
+// ── State dokumen yang dapat diedit/diregenerasi ──────────────────────
+window._scDoc = null; // { sections:[{id,label,content,words}], meta:{...}, editMode:false }
+
+function _scInitDocFromResult(content, segments, mode, model, lang, cite, temp, title, instructions, refContext) {
+  var sections;
+  if (segments && segments.length) {
+    sections = segments.map(function (s, i) {
+      return { id: 'seg' + i, label: s.label, content: s.content, words: s.words || countWords(s.content || '') };
+    });
+  } else {
+    var blocks = parseStructuredBlocks(content || '');
+    if (blocks.length > 1) {
+      sections = blocks.map(function (b, i) {
+        var full = (b.heading ? _headingToMarkdown(b.level, b.heading) + '\n\n' : '') + b.body;
+        return { id: 'blk' + i, label: b.heading || ('Bagian ' + (i + 1)), content: full.trim(), words: countWords(full) };
+      });
+    } else {
+      sections = [{ id: 'full', label: title || 'Naskah', content: content || '', words: countWords(content || '') }];
+    }
+  }
+  window._scDoc = {
+    sections: sections,
+    meta: { mode: mode, model: model, lang: lang, citeStyle: cite, temp: temp, title: title, instructions: instructions, refContext: refContext, uploaded: false },
+    editMode: false
+  };
+  _scSyncEditButton();
+}
+
+function _scSyncEditButton() {
+  var btn = document.getElementById('scEditModeBtn');
+  if (btn) btn.style.display = (window._scDoc && window._scDoc.sections && window._scDoc.sections.length) ? '' : 'none';
+}
+
+// ── Toggle antara tampilan baca biasa & tampilan edit per-bagian ──────
+function scToggleEditMode() {
+  if (!window._scDoc) { toast('Belum ada naskah untuk diedit.', 3000); return; }
+  window._scDoc.editMode = !window._scDoc.editMode;
+  var btn = document.getElementById('scEditModeBtn');
+  if (window._scDoc.editMode) {
+    if (btn) btn.innerHTML = '👁️ Tampilan Baca';
+    scRenderEditable();
+  } else {
+    if (btn) btn.innerHTML = '✏️ Edit &amp; Regenerate';
+    var flat = window._scDoc.sections.map(function (s) { return s.content; }).join('\n\n');
+    displayOutput(flat, 'outputArea', 'outputCard');
+  }
+}
+
+function _scEscAttr(s) { return String(s || '').replace(/"/g, '&quot;'); }
+
+// ── Render tampilan edit: tiap bagian punya toolbar Edit/Regenerate, tiap
+//    paragraf non-heading punya tombol regenerasi kecil saat hover ───────
+function scRenderEditable() {
+  var area = document.getElementById('outputArea');
+  if (!area || !window._scDoc) return;
+  var html = '<div class="sc-edit-wrap">';
+  html += '<div class="sc-edit-toolbar-note">✏️ Mode Edit aktif — regenerasi per-bagian/paragraf, atau klik "Edit" untuk mengubah teks langsung.</div>';
+  window._scDoc.sections.forEach(function (sec, i) {
+    html += '<div class="sc-section" id="sc-sec-' + i + '" data-idx="' + i + '">';
+    html += '<div class="sc-section-bar">';
+    html += '<span class="sc-section-label">' + escHtml(sec.label) + '</span>';
+    html += '<span class="sc-section-words">' + (sec.words || countWords(sec.content || '')).toLocaleString('id-ID') + ' kata</span>';
+    html += '<button class="btn btn-sm btn-secondary" onclick="scEditSectionToggle(' + i + ')" id="sc-edit-btn-' + i + '">✏️ Edit</button>';
+    html += '<button class="btn btn-sm btn-secondary" onclick="scRegenerateSection(' + i + ')" id="sc-regen-btn-' + i + '">🔄 Regenerate Bagian</button>';
+    html += '</div>';
+    html += '<div class="sc-section-body" id="sc-sec-body-' + i + '">' + _scRenderSectionParas(sec.content, i) + '</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+  area.innerHTML = html;
+  try { _renderAcademicVisuals('outputArea'); } catch (_rv) {}
+}
+
+// Pecah 1 bagian menjadi paragraf; setiap paragraf NON-heading mendapat
+// tombol regenerasi kecil (heading tidak diberi tombol — tidak masuk akal
+// meregenerasi 1 baris judul saja).
+function _scRenderSectionParas(content, secIdx) {
+  var paras = String(content || '').split(/\n\s*\n/).filter(function (p) { return p.trim(); });
+  return paras.map(function (p, j) {
+    var isHeading = /^#{1,4}\s/.test(p.trim());
+    var renderedHtml = marked.parse(p);
+    if (isHeading) {
+      return '<div class="sc-para sc-para-heading" data-sec="' + secIdx + '" data-para="' + j + '">' + renderedHtml + '</div>';
+    }
+    return '<div class="sc-para" data-sec="' + secIdx + '" data-para="' + j + '">' +
+      '<button class="sc-para-regen-btn" title="Regenerate paragraf ini" onclick="scRegenerateParagraph(' + secIdx + ',' + j + ')">🔄</button>' +
+      renderedHtml + '</div>';
+  }).join('');
+}
+
+// ── Edit langsung (textarea) untuk 1 bagian ───────────────────────────
+function scEditSectionToggle(idx) {
+  var sec = window._scDoc.sections[idx];
+  var bodyEl = document.getElementById('sc-sec-body-' + idx);
+  var editBtn = document.getElementById('sc-edit-btn-' + idx);
+  if (!bodyEl) return;
+  if (bodyEl.getAttribute('data-editing') === '1') return; // sudah dalam mode edit
+  bodyEl.setAttribute('data-editing', '1');
+  bodyEl.innerHTML =
+    '<textarea class="sc-edit-textarea" id="sc-edit-ta-' + idx + '">' + escHtml(sec.content) + '</textarea>' +
+    '<div class="sc-edit-actions">' +
+      '<button class="btn btn-sm btn-primary" onclick="scSaveSectionEdit(' + idx + ')">💾 Simpan</button>' +
+      '<button class="btn btn-sm btn-secondary" onclick="scCancelSectionEdit(' + idx + ')">✖ Batal</button>' +
+    '</div>';
+  if (editBtn) editBtn.style.display = 'none';
+}
+function scSaveSectionEdit(idx) {
+  var ta = document.getElementById('sc-edit-ta-' + idx);
+  if (!ta) return;
+  var newText = ta.value;
+  window._scDoc.sections[idx].content = newText;
+  window._scDoc.sections[idx].words = countWords(newText);
+  var bodyEl = document.getElementById('sc-sec-body-' + idx);
+  if (bodyEl) bodyEl.removeAttribute('data-editing');
+  scRenderEditable();
+  _scSyncFlatOutput();
+  toast('💾 Perubahan bagian disimpan.', 2500);
+}
+function scCancelSectionEdit(idx) {
+  var bodyEl = document.getElementById('sc-sec-body-' + idx);
+  if (bodyEl) bodyEl.removeAttribute('data-editing');
+  scRenderEditable();
+}
+
+// Sinkronkan lastOutput (dipakai Export DOCX/PDF/Simpan) dengan state _scDoc
+// terkini setiap kali ada perubahan (edit manual maupun regenerasi).
+function _scSyncFlatOutput() {
+  if (!window._scDoc) return;
+  var flat = window._scDoc.sections.map(function (s) { return s.content; }).join('\n\n');
+  try { lastOutput = flat; } catch (_e) { window.lastOutput = flat; }
+  try {
+    var wc = countWords(flat);
+    var wcEl = document.getElementById('wordCount');
+    if (wcEl) wcEl.textContent = wc.toLocaleString('id-ID') + ' kata';
+  } catch (_e2) {}
+}
+
+// ── Regenerasi 1 bagian/bab penuh ──────────────────────────────────────
+async function scRegenerateSection(idx) {
+  if (!window._scDoc) return;
+  var sec = window._scDoc.sections[idx];
+  var meta = window._scDoc.meta;
+  var btn = document.getElementById('sc-regen-btn-' + idx);
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Meregenerasi...'; }
+  try {
+    var model = SC_REGEN_MODEL_FOR(meta.model);
+    var lang = meta.lang || 'id';
+    var langName = lang === 'id' ? 'Bahasa Indonesia' : lang === 'en' ? 'English' : 'Arabic';
+    var targetWords = sec.words || countWords(sec.content) || 500;
+    var systemPrompt, userPrompt;
+
+    if (meta.mode && SEGMENTS[meta.mode] && !meta.uploaded) {
+      // Bagian ini berasal dari generasi terstruktur — pakai instruksi segmen ASLI
+      // agar hasil regenerasi tetap konsisten dgn spesifikasi bagian tsb.
+      var segDefs = SEGMENTS[meta.mode];
+      var segIdx = segDefs.findIndex(function (s) { return s.label === sec.label; });
+      if (segIdx === -1) segIdx = idx;
+      var segInstruction = getSegmentInstruction(segDefs[segIdx] ? segDefs[segIdx].id : sec.id, meta.mode, lang, meta.citeStyle, segIdx, segDefs.length);
+      systemPrompt = _injectSystemDirective(getSystemPrompt(meta.mode, lang, meta.citeStyle), meta.instructions);
+      userPrompt = `JUDUL/TOPIK: ${meta.title}` + _userDirectiveBlock(meta.instructions) +
+        (meta.refContext ? `\n\nREFERENSI TERVERIFIKASI:\n${meta.refContext}\n` : '') +
+        `\n\nTULIS ULANG (REGENERASI) bagian berikut secara utuh dan lebih baik dari versi sebelumnya:\n\n${segInstruction}` +
+        `\n\nVERSI SEBELUMNYA (untuk referensi konteks — JANGAN disalin ulang, tulis versi BARU yang lebih baik):\n${sec.content.slice(0, 1500)}...` +
+        `\n\nWAJIB: tulis sampai TUNTAS, jangan berhenti di tengah, minimum ${targetWords} kata.`;
+    } else {
+      // Bagian generik (single-pass/dual-AI/naskah unggahan) — regenerasi umum
+      systemPrompt = 'You are an elite academic editor. Rewrite/regenerate the given academic section to be clearer, ' +
+        'more rigorous, and better argued, in ' + langName + '. Preserve all citations, technical terms, and the ' +
+        'original heading (if any) EXACTLY as given at the start. Do not add meta-commentary or preamble — output ' +
+        'ONLY the regenerated section text, complete and coherent, ending with a proper closing sentence.';
+      userPrompt = 'BAGIAN NASKAH YANG AKAN DIREGENERASI:\n\n' + sec.content +
+        '\n\nTulis ulang bagian ini secara lebih baik (lebih jelas, koheren, dan mendalam), ' +
+        'panjang mendekati ' + targetWords + ' kata, pertahankan heading di baris pertama jika ada.';
+    }
+
+    var regenerated = await _scCompleteGeneration(userPrompt, systemPrompt, model, meta.temp || 0.7, targetWords, sec.label);
+    window._scDoc.sections[idx].content = regenerated;
+    window._scDoc.sections[idx].words = countWords(regenerated);
+    scRenderEditable();
+    _scSyncFlatOutput();
+    toast('✅ Bagian "' + sec.label + '" berhasil diregenerasi.', 3000);
+  } catch (e) {
+    console.warn('[scRegenerateSection] error:', e.message);
+    toast('⚠️ Gagal regenerasi bagian: ' + e.message, 5000);
+    if (btn) { btn.disabled = false; btn.innerHTML = '🔄 Regenerate Bagian'; }
+  }
+}
+
+// ── Regenerasi 1 paragraf saja (dengan konteks kalimat sebelum/sesudah) ─
+async function scRegenerateParagraph(secIdx, paraIdx) {
+  if (!window._scDoc) return;
+  var sec = window._scDoc.sections[secIdx];
+  var paras = sec.content.split(/\n\s*\n/).filter(function (p) { return p.trim(); });
+  if (paraIdx < 0 || paraIdx >= paras.length) return;
+  var target = paras[paraIdx];
+  if (/^#{1,4}\s/.test(target.trim())) { toast('Baris ini adalah heading — tidak bisa diregenerasi sebagai paragraf.', 3500); return; }
+
+  var meta = window._scDoc.meta;
+  var model = SC_REGEN_MODEL_FOR(meta.model);
+  var lang = meta.lang || 'id';
+  var langName = lang === 'id' ? 'Bahasa Indonesia' : lang === 'en' ? 'English' : 'Arabic';
+  var prevCtx = paras[paraIdx - 1] ? paras[paraIdx - 1].slice(-400) : '';
+  var nextCtx = paras[paraIdx + 1] ? paras[paraIdx + 1].slice(0, 400) : '';
+  var targetWords = countWords(target);
+
+  var wrapEl = document.querySelector('.sc-para[data-sec="' + secIdx + '"][data-para="' + paraIdx + '"]');
+  var origHtml = wrapEl ? wrapEl.innerHTML : null;
+  if (wrapEl) wrapEl.innerHTML = '<span class="sc-para-loading">⏳ Meregenerasi paragraf...</span>';
+
+  try {
+    var systemPrompt = 'You are an elite academic editor. Rewrite ONE paragraph of an academic text to be clearer and ' +
+      'better written, in ' + langName + '. Preserve all citations and technical terms. Match the surrounding tone and ' +
+      'argument. Output ONLY the rewritten paragraph — no heading, no preamble, no meta-commentary, no markdown fences.';
+    var userPrompt =
+      (prevCtx ? 'KONTEKS SEBELUM (untuk koherensi, JANGAN diulang):\n...' + prevCtx + '\n\n' : '') +
+      'PARAGRAF YANG AKAN DIREGENERASI:\n' + target +
+      (nextCtx ? '\n\nKONTEKS SESUDAH (untuk koherensi, JANGAN diulang):\n' + nextCtx + '...\n' : '') +
+      '\n\nTulis ulang HANYA paragraf target menjadi versi yang lebih baik, panjang serupa (~' + targetWords + ' kata), ' +
+      'transisi mulus dengan konteks sebelum/sesudah.';
+
+    var regenerated = await _scCompleteGeneration(userPrompt, systemPrompt, model, meta.temp || 0.7, targetWords, null);
+    paras[paraIdx] = regenerated;
+    sec.content = paras.join('\n\n');
+    sec.words = countWords(sec.content);
+    scRenderEditable();
+    _scSyncFlatOutput();
+    toast('✅ Paragraf berhasil diregenerasi.', 2500);
+  } catch (e) {
+    console.warn('[scRegenerateParagraph] error:', e.message);
+    toast('⚠️ Gagal regenerasi paragraf: ' + e.message, 5000);
+    if (wrapEl && origHtml !== null) wrapEl.innerHTML = origHtml;
+  }
+}
+
+// ── Regenerasi SELURUH naskah (menjalankan ulang pipeline generate) ────
+async function scRegenerateAll() {
+  if (!window._scDoc) { toast('Belum ada naskah.', 3000); return; }
+  var meta = window._scDoc.meta;
+  if (!meta.mode || meta.uploaded) {
+    toast('⚠️ Naskah ini tidak memiliki konteks generasi asli (mis. hasil unggahan) — regenerasi penuh tidak tersedia. Gunakan Regenerate per-bagian/paragraf.', 6000);
+    return;
+  }
+  if (!confirm('Regenerasi SELURUH naskah akan menimpa semua bagian, termasuk edit manual yang sudah dilakukan. Lanjutkan?')) return;
+  try {
+    setStatus('🔄 Meregenerasi seluruh naskah...');
+    await _dispatchGeneration(meta.mode, meta.model, meta.lang, meta.citeStyle, meta.temp, meta.title, meta.instructions, meta.refContext);
+    toast('✅ Naskah berhasil diregenerasi seluruhnya.', 3500);
+  } catch (e) {
+    console.warn('[scRegenerateAll] error:', e.message);
+    toast('⚠️ Gagal regenerasi penuh: ' + e.message, 5000);
+  }
+}
+
+// ── Unggah naskah luar untuk diedit/diregenerasi ──────────────────────
+// Memakai kembali pembaca file yang sudah ada (_readTextFile/_readDocFile/
+// _readDocxFile/_readPdfFile) dan pemecah struktur heading yang sama
+// (parseStructuredBlocks) dengan pipeline Kondensasi, agar konsisten.
+async function scUploadDocToEdit(input) {
+  var files = Array.prototype.slice.call(input.files || []);
+  if (!files.length) return;
+  var f = files[0];
+  var ext = (f.name.split('.').pop() || '').toLowerCase();
+  toast('⏳ Membaca "' + f.name + '"...', 3000);
+  try {
+    var txt = '';
+    if (['txt', 'md', 'markdown', 'csv', 'json', 'html', 'htm'].indexOf(ext) >= 0) txt = await _readTextFile(f);
+    else if (ext === 'doc') txt = await _readDocFile(f);
+    else if (ext === 'docx') txt = await _readDocxFile(f);
+    else if (ext === 'pdf') txt = await _readPdfFile(f);
+    else txt = await _readTextFile(f);
+    if (ext === 'html' || ext === 'htm') txt = txt.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ');
+    txt = String(txt || '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    if (!txt) { toast('⚠️ File kosong atau gagal dibaca.', 4000); input.value = ''; return; }
+
+    var blocks = parseStructuredBlocks(txt);
+    var sections;
+    if (blocks.length > 1) {
+      sections = blocks.map(function (b, i) {
+        var full = (b.heading ? _headingToMarkdown(b.level, b.heading) + '\n\n' : '') + b.body;
+        return { id: 'up' + i, label: b.heading || ('Bagian ' + (i + 1)), content: full.trim(), words: countWords(full) };
+      });
+    } else {
+      sections = [{ id: 'up0', label: f.name.replace(/\.[^.]+$/, ''), content: txt, words: countWords(txt) }];
+    }
+
+    window._scDoc = {
+      sections: sections,
+      meta: { mode: null, model: 'google/gemini-2.5-pro-preview', lang: 'id', citeStyle: 'apa', temp: 0.7, title: f.name, instructions: '', refContext: '', uploaded: true },
+      editMode: true
+    };
+    document.getElementById('outputCard').style.display = '';
+    _scSyncEditButton();
+    var btn = document.getElementById('scEditModeBtn');
+    if (btn) btn.innerHTML = '👁️ Tampilan Baca';
+    scRenderEditable();
+    _scSyncFlatOutput();
+    toast('📎 Naskah "' + f.name + '" dimuat (' + sections.length + ' bagian) — siap diedit/diregenerasi.', 5000);
+  } catch (e) {
+    console.warn('[scUploadDocToEdit] error:', e.message);
+    toast('⚠️ Gagal membaca file: ' + e.message, 5000);
+  }
+  input.value = '';
+}
+
+// ════════════════════════════════════════════════════════════════════
 // FIX v18 — KONDENSASI KORESPONDENSI PER-PARAGRAF (model-agnostic)
 // ROOT CAUSE v17: memberi model SATU section utuh (1.000–1.700 kata) dengan
 // perintah "padatkan ke N kata" membuat sebagian besar model mengembalikan
@@ -14000,10 +14434,12 @@ async function generateWriting() {
 // ATAU dari Bibliography Builder (kurasi manual pengguna).
 // ════════════════════════════════════════════════════════════════════
 async function _dispatchGeneration(mode, model, lang, cite, temp, title, instructions, refContext) {
+  var _scSegments = null; // FIX v19: ditangkap utk fitur Edit & Regenerate — diisi hanya oleh jalur segmented
   if (model === 'dual_gemini_claude') {
     if (SEGMENTED_MODES.has(mode)) {
       const result = await runDualAISegmented(mode, lang, cite, temp, title, instructions, refContext);
       lastOutput = result.content;
+      _scSegments = result.segments || null;
       displayOutput(result.content, 'outputArea', 'outputCard');
       updateStats(result.content, 'dual_gemini_claude');
     } else {
@@ -14024,6 +14460,7 @@ async function _dispatchGeneration(mode, model, lang, cite, temp, title, instruc
       setStatus('🧩 o4-mini-high Kerangka + Argumen — Segmented...');
       const result = await runDualO4GPTSegmented(mode, lang, cite, temp, title, instructions, refContext);
       lastOutput = result.content;
+      _scSegments = result.segments || null;
       displayOutput(result.content, 'outputArea', 'outputCard');
       updateStats(result.content, 'dual_o4_gpt');
     } else {
@@ -14043,6 +14480,7 @@ async function _dispatchGeneration(mode, model, lang, cite, temp, title, instruc
     const result = await runSegmentedGeneration(mode, model, lang, cite, temp, title, instructions, refContext);
     // FIX v10.3: lastOutput sudah di-set per-segmen dalam runSegmentedGeneration.
     try { lastOutput = result.content; } catch(_le) { window.lastOutput = result.content; }
+    _scSegments = result.segments || null;
     try { displayOutput(result.content, 'outputArea', 'outputCard'); } catch(_de) {
       console.warn('[displayOutput final] error:', _de.message);
     }
@@ -14069,6 +14507,14 @@ async function _dispatchGeneration(mode, model, lang, cite, temp, title, instruc
       }
     }
   } catch (_ce) { console.warn('[enforceCitationStyle]', _ce && _ce.message); }
+
+  // FIX v19 — EDIT & REGENERATE: simpan dokumen ke state yang dapat diedit/
+  // diregenerasi per-bagian/per-paragraf, terlepas dari jalur generasi mana
+  // yang dipakai (segmented, single-pass, atau dual-AI). Non-fatal: kegagalan
+  // di sini tidak boleh mengganggu tampilan hasil generate yang sudah berhasil.
+  try {
+    _scInitDocFromResult(lastOutput, _scSegments, mode, model, lang, cite, temp, title, instructions, refContext);
+  } catch (_scErr) { console.warn('[Edit&Regenerate init] non-fatal:', _scErr && _scErr.message); }
 }
 
 // ════════════════════════════════════════════════════════════════════
